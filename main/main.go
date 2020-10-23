@@ -1,50 +1,67 @@
 package main
 
 import (
+    "fmt"
     "database/sql"
     "log"
     _ "github.com/mattn/go-sqlite3"
+    "github.com/gin-gonic/gin"
 )
 
-type hiscoreEntry struct {
-    id int64
-    name string
-    team string
-    kills int
-    deaths int
+type HiscoreEntry struct {
+    Id int64
+    Name string
+    Team string
+    Kills int
+    Deaths int
+}
+
+func (r *HiscoreEntry) toString() string {
+    return fmt.Sprint(r.Id, " ", r.Name, " ", r.Team, " ", r.Kills, " ", r.Deaths)
 }
 
 func main() {
+
     db, err := sql.Open("sqlite3", "./db/db")
     if err != nil {
         log.Fatal(err)
     }
     defer db.Close()
 
-    var entries = []hiscoreEntry {
-        hiscoreEntry { 0, "Hank", "sutasu ind", 4, 20 },
-        hiscoreEntry { 0, "AxCWs", "sutasu ind", 0, 69 },
-        hiscoreEntry { 0, "Moebius", "sutasu ind", 13, 37 },
-        hiscoreEntry { 0, "Bank", "sutasu ind", 12, 34 },
-    }
-    insertMany(db, entries)
-    hiscores := selectAll(db)
-    for _, h := range hiscores {
-        log.Print(h.id, " ", h.name, " ", h.team, " ", h.kills, " ", h.deaths)
-    }
+    router := gin.Default()
+
+    router.GET("/hiscores", func(c *gin.Context) {
+        hiscores := selectAll(db)
+        c.JSON(200, dbHiscoresToJson(hiscores))
+    })
+
+    router.Run()
 }
 
-func selectAll(db *sql.DB) []hiscoreEntry {
+func dbHiscoresToJson(hiscores []HiscoreEntry) []gin.H {
+    a := make([]gin.H, 0, len(hiscores))
+    for _, h := range hiscores {
+        a = append(a, gin.H {
+            "name": h.Name,
+            "team": h.Team,
+            "kills": h.Kills,
+            "deaths": h.Deaths,
+        })
+    }
+    return a
+}
+
+func selectAll(db *sql.DB) []HiscoreEntry {
     rows, err := db.Query("select * from hiscores")
     if err != nil {
         log.Fatal(err)
     }
     defer rows.Close()
 
-    results := make([]hiscoreEntry, 0)
+    results := make([]HiscoreEntry, 0)
     for rows.Next() {
-        h := hiscoreEntry {}
-        err = rows.Scan(&h.id, &h.name, &h.team, &h.kills, &h.deaths)
+        h := HiscoreEntry {}
+        err = rows.Scan(&h.Id, &h.Name, &h.Team, &h.Kills, &h.Deaths)
         if err != nil {
             log.Fatal(err)
         }
@@ -57,7 +74,7 @@ func selectAll(db *sql.DB) []hiscoreEntry {
     return results
 }
 
-func insertMany(db *sql.DB, entries []hiscoreEntry) {
+func insertMany(db *sql.DB, entries []HiscoreEntry) {
     stmt, err := db.Prepare("insert into hiscores (name, team, kills, deaths) values (?, ?, ?, ?)")
     if err != nil {
         log.Fatal(err)
@@ -65,7 +82,7 @@ func insertMany(db *sql.DB, entries []hiscoreEntry) {
     defer stmt.Close()
 
     for _, entry := range entries {
-        _, err = stmt.Exec(entry.name, entry.team, entry.kills, entry.deaths)
+        _, err = stmt.Exec(entry.Name, entry.Team, entry.Kills, entry.Deaths)
         if err != nil {
             log.Fatal(err)
         }
