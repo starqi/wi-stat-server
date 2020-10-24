@@ -1,4 +1,4 @@
-module hi
+module github.com/starqi/wi-util-servers
 
 go 1.15
 
