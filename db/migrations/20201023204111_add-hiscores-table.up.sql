@@ -3,5 +3,7 @@ create table hiscores (
     name text,
     team text,
     kills integer,
-    deaths integer
+    deaths integer,
+    bounty integer,
+    timestamp integer
 );

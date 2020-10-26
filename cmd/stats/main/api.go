@@ -1,6 +1,7 @@
 package main
 
 import (
+    "time"
     "net/http"
     "log"
     "database/sql"
@@ -9,11 +10,14 @@ import (
     hsql "github.com/starqi/wi-util-servers/cmd/stats/sql"
 )
 
+// Required does not work unless value can contain nil?
 type HiscoreEntry struct {
-    Name string `json:"name" binding:"required"`
-    Team string `json:"team" binding:"required"`
-    Kills int `json:"kills" binding:"required"`
-    Deaths int `json:"deaths" binding:"required"`
+    Name string `json:"name"`
+    Team string `json:"team"`
+    Kills int `json:"kills"`
+    Deaths int `json:"deaths"`
+    Bounty int `json:"bounty"`
+    Timestamp string `json:"timestamp"`
 }
 
 var hdb *hsql.HiscoresDb
@@ -53,7 +57,7 @@ func getTopHiscores(c *gin.Context) {
     c.JSON(http.StatusOK, dbHiscoresToJson(hiscores))
 }
 
-// curl -d '[{"name":"hank","team":"sutasu","kills":0,"deaths":400}]' -H 'Content-Type:application/json' -u me:123 -i localhost:8080/hiscore
+// curl -d '[{"name":"hank","team":"sutasu","kills":0,"deaths":400,"bounty":38}]' -H 'Content-Type:application/json' -u me:123 -i localhost:8080/hiscore
 func postHiscore(c *gin.Context) {
     var json []HiscoreEntry
     if err := c.ShouldBindJSON(&json); err != nil {
@@ -69,7 +73,7 @@ func dbHiscoresToJson(hiscores []hsql.HiscoreEntry) []HiscoreEntry {
     a := make([]HiscoreEntry, 0, len(hiscores))
     for _, h := range hiscores {
         a = append(a, HiscoreEntry {
-             h.Name, h.Team, h.Kills, h.Deaths,
+            h.Name, h.Team, h.Kills, h.Deaths, h.Bounty, h.Timestamp.Format(time.RFC1123),
         })
     }
     return a
@@ -79,7 +83,7 @@ func jsonHiscoresToDb(hiscores []HiscoreEntry) []hsql.HiscoreEntry {
     a := make([]hsql.HiscoreEntry, 0, len(hiscores))
     for _, h := range hiscores {
         a = append(a, hsql.HiscoreEntry {
-             0, h.Name, h.Team, h.Kills, h.Deaths,
+             0, h.Name, h.Team, h.Kills, h.Deaths, h.Bounty, nil,
         })
     }
     return a
