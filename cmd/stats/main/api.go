@@ -20,7 +20,21 @@ type HiscoreEntry struct {
     Timestamp string `json:"timestamp"`
 }
 
+const cullTickerSeconds = 60
+const topNToKeep = 10
+
 var hdb *hsql.HiscoresDb
+var cullTicker *time.Ticker
+
+func cullTickerFunc() {
+    for {
+        <-cullTicker.C
+        rowsAffected := hdb.Cull(topNToKeep)
+        if rowsAffected > 0 {
+            log.Print("Culled ", rowsAffected, " rows")
+        }
+    }
+}
 
 func main() {
 
@@ -30,6 +44,9 @@ func main() {
     }
     defer db.Close()
     hdb = hsql.MakeHiscoresDb(db)
+
+    cullTicker = time.NewTicker(cullTickerSeconds * time.Second)
+    go cullTickerFunc()
 
     router := gin.Default()
     router.Use(func (c *gin.Context) {
@@ -53,7 +70,7 @@ func main() {
 }
 
 func getTopHiscores(c *gin.Context) {
-    hiscores := hdb.Select()
+    hiscores := hdb.Select(10)
     c.JSON(http.StatusOK, dbHiscoresToJson(hiscores))
 }
 

@@ -32,19 +32,45 @@ func (r *HiscoreEntry) ToString() string {
 
 // FIXME Fatals
 
-func (hdb *HiscoresDb) Select() []HiscoreEntry {
-    rows, err := hdb.db.Query("select * from hiscores order by kills desc")
+func (hdb *HiscoresDb) Cull(topN int64) int64 {
+    result, err := hdb.db.Exec(
+        `
+        delete from hiscores where id not in (
+            with ranked as (select id, row_number() over (order by kills desc) as rn from hiscores order by rn desc)
+            select id from ranked where rn <= ?
+        );
+        `,
+        topN,
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    return rowsAffected
+}
+
+func (hdb *HiscoresDb) Select(topN int) []HiscoreEntry {
+    rows, err := hdb.db.Query(
+        "select * from (select *, row_number() over (order by kills desc) as rn from hiscores order by rn desc) where rn <= ?",
+        topN,
+    )
     if err != nil {
         log.Fatal(err)
     }
     defer rows.Close()
 
     results := make([]HiscoreEntry, 0)
-    var unixTimeHolder int64;
+    var unixTimeHolder int64
+    var rowNumHolder int
     for rows.Next() {
 
         h := HiscoreEntry {}
-        err = rows.Scan(&h.Id, &h.Name, &h.Team, &h.Kills, &h.Deaths, &h.Bounty, &unixTimeHolder)
+        err = rows.Scan(&h.Id, &h.Name, &h.Team, &h.Kills, &h.Deaths, &h.Bounty, &unixTimeHolder, &rowNumHolder)
         if err != nil {
             log.Fatal(err)
         }
