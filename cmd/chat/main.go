@@ -20,22 +20,24 @@ var upgrader = websocket.Upgrader {
     CheckOrigin: checkOrigin,
 }
 
+// WS no CORS
 func checkOrigin(r *http.Request) bool {
-    log.Print("Origin = ", r.Host)
-    return strings.Index(r.Host, "localhost") == 0
+    origin := r.Header.Get("origin")
+    log.Print("Origin = ", origin)
+    return strings.Index(origin, "http://localhost") == 0 || strings.Index(origin, "localhost") == 0
 }
 
 func chat(c *gin.Context) {
     conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
     if err != nil {
-        log.Print("Chat init failed!", err)
+        log.Print("Chat init failed! ", err)
         return
     }
     go func() {
         for {
             messageType, p, err := conn.ReadMessage()
             if err != nil {
-                log.Print("Read message failed!", err)
+                log.Print("Read message failed! ", err)
                 return
             }
             if messageType == websocket.TextMessage {
