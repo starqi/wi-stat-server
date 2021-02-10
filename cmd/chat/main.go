@@ -1,6 +1,7 @@
 package main
 
 import (
+    "time"
     "net/http"
     "log"
     "github.com/gin-gonic/gin"
@@ -8,10 +9,79 @@ import (
     "strings"
 )
 
+type messages struct {
+    arr []string
+    index int
+}
+
+func makeMessages(size int) messages {
+    m := messages {
+        arr: make([]string, size),
+        index: 0,
+    }
+    return m
+}
+
+func (r *messages) add(s string) {
+    r.arr[r.index] = s
+    r.index = (r.index + 1) % len(r.arr)
+}
+
+func (r *messages) forEach(cb func(int, string)) {
+    l := len(r.arr)
+    for i := 0; i < l; i++ {
+        index := r.index - 1 - i
+        if index < 0 {
+            index = l + (index % l);
+        }
+        item := r.arr[index]
+        if item == "" {
+            break;
+        }
+        cb(index, item)
+    }
+}
+
+var inbound chan string
+var broadcast chan string
+var clients map[*websocket.Conn]bool
+
 func main() {
+
+    inbound = make(chan string)
+    broadcast = make(chan string)
+    clients = make(map[*websocket.Conn]bool)
+
+    go aggregator()
+    go broadcaster()
+
     router := gin.Default()
     router.GET("/chat", chat)
     router.Run()
+}
+
+func aggregator() {
+    outboundTicker := time.NewTicker(2000 * time.Millisecond)
+    msgs := makeMessages(20)
+    for {
+        select {
+        case m := <-inbound:
+            msgs.add(m)
+        case <-outboundTicker.C:
+            msgs.forEach(func (i int, s string) {
+                broadcast <- s
+            })
+        }
+    }
+}
+
+func broadcaster() {
+    for {
+        s := <-broadcast
+        for c, _ := range clients {
+            c.WriteMessage(websocket.TextMessage, []byte(s))
+        }
+    }
 }
 
 var upgrader = websocket.Upgrader {
@@ -33,18 +103,25 @@ func chat(c *gin.Context) {
         log.Print("Chat init failed! ", err)
         return
     }
-    go func() {
-        for {
-            messageType, p, err := conn.ReadMessage()
-            if err != nil {
-                log.Print("Read message failed! ", err)
-                return
-            }
-            if messageType == websocket.TextMessage {
-                hi := string(p)
-                log.Print("Message: ", hi)
-            }
-        }
-    }()
+    go client(conn)
     c.Status(http.StatusOK);
+}
+
+func client(conn *websocket.Conn) {
+    clients[conn] = true
+    defer func() {
+        clients[conn] = false
+    }()
+
+    for {
+        messageType, p, err := conn.ReadMessage()
+        if err != nil {
+            log.Print("Read message failed! ", err)
+            return
+        }
+        if messageType == websocket.TextMessage {
+            s := string(p)
+            inbound <- s
+        }
+    }
 }
