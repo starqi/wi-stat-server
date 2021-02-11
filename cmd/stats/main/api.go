@@ -23,7 +23,6 @@ type HiscoreEntry struct {
 const cullTickerSeconds = 60
 const topNToKeep = 10
 
-// FIXME Pass thru params
 var hdb *hsql.HiscoresDb
 var cullTicker *time.Ticker
 

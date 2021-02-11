@@ -103,7 +103,7 @@ func aggregator() {
             clients[&c] = true
             go client_loop(&c)
         case c := <-unregister:
-            clients[c] = false
+            delete(clients, c)
         }
     }
 }
