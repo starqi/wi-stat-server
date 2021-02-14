@@ -50,9 +50,8 @@ func main() {
 
     router := gin.Default()
     router.Use(func (c *gin.Context) {
-        c.Header("Access-Control-Allow-Origin", "http://localhost:8081")
+        c.Header("Access-Control-Allow-Origin", "*")
         c.Header("Access-Control-Allow-Methods", "*")
-        c.Header("Access-Control-Allow-Credentials", "true")
         c.Header("Access-Control-Allow-Headers", "Authorization, *")
         if c.Request.Method == "OPTIONS" {
             c.AbortWithStatus(http.StatusNoContent)
@@ -61,6 +60,7 @@ func main() {
         }
     })
 
+    // Example, not actual security
     basicAuthGroup := router.Group("/hiscore", gin.BasicAuth(gin.Accounts {
         "me": "123",
     }))
