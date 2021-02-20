@@ -1,1 +1,17 @@
-FIXME
+FROM golang:1.15.8-alpine
+# PORT is read by Gin
+ENV PORT=8082
+WORKDIR /go/src/wi-util-servers
+COPY .. .
+
+RUN apk add --no-cache build-base; \
+    apk add --no-cache bash; \
+    apk add --no-cache sqlite; \
+    apk add --no-cache git; \
+    go install -v ./...
+
+RUN cd ./scripts; \
+    bash install-migrate-lib.sh; \
+    echo IPressedEnter | bash migrate.sh
+
+ENTRYPOINT stats

@@ -1,9 +1,8 @@
-# TODO Build script with name
 FROM golang:1.15.8-alpine
 # PORT is read by Gin
 ENV PORT=8081
 WORKDIR /go/src/wi-util-servers
-COPY . .
-RUN apk add build-base
+COPY .. .
+RUN apk add --no-cache build-base
 RUN go install -v ./...
 ENTRYPOINT chat
