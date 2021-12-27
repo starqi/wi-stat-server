@@ -1,39 +1,60 @@
 package sql
 
 import (
-    "fmt"
-    "database/sql"
-    "log"
-    "time"
-    _ "github.com/mattn/go-sqlite3"
+    "errors"
+    "gorm.io/gorm"
+    "gorm.io/driver/sqlite"
+    "sort"
 )
 
 type HiscoresDb struct {
-    db *sql.DB
+    db *gorm.DB
 }
 
-func MakeHiscoresDb(db *sql.DB) *HiscoresDb {
-    return &HiscoresDb { db }
+func MakeHiscoresDb(sqliteDbPath string) (*HiscoresDb, error) {
+    db, err := gorm.Open(sqlite.Open(sqliteDbPath), &gorm.Config{})
+    if err != nil {
+        return nil, err
+    }
+    return &HiscoresDb { db }, nil
 }
 
-type HiscoreEntry struct {
-    Id int64
-    Name string
-    Team string
-    Kills int
-    Deaths int
-    Bounty int
-    Timestamp *time.Time
+type HiscoreWithMap struct {
+    hiscore *Hiscore
+    valueMap map[string]int64
 }
 
-func (r *HiscoreEntry) ToString() string {
-    return fmt.Sprint(r.Id, " ", r.Name, " ", r.Team, " ", r.Kills, " ", r.Deaths, " ", r.Bounty, " ", r.Timestamp.String())
+func (r *Hiscore) withMap() HiscoreWithMap {
+    valueMap := make(map[string]int64)
+    for _, v := range r.HiscoreValues {
+        valueMap[v.Key] = v.Value
+    }
+    return HiscoreWithMap { hiscore: r, valueMap: valueMap }
 }
 
-// FIXME Fatals
+type MaxSortedHiscores struct {
+    rows []HiscoreWithMap
+    key string
+}
 
-func (hdb *HiscoresDb) Cull(topN int64) int64 {
-    result, err := hdb.db.Exec(
+func (r *MaxSortedHiscores) Len() int {
+    return len(r.rows)
+}
+
+func (r *MaxSortedHiscores) Less(i, j int) bool {
+    return r.rows[i].valueMap[r.key] > r.rows[j].valueMap[r.key]
+
+}
+
+func (r *MaxSortedHiscores) Swap(i, j int) {
+    t := r.rows[i]
+    r.rows[i] = r.rows[j]
+    r.rows[j] = t
+}
+
+/*
+func (hdb *HiscoresDb) Cull(topN int64) (int64, error) {
+    result := hdb.db.Exec(
         `
         delete from hiscores where id not in (
             with ranked as (select id, row_number() over (order by kills desc) as rn from hiscores order by rn desc)
@@ -42,62 +63,51 @@ func (hdb *HiscoresDb) Cull(topN int64) int64 {
         `,
         topN,
     )
-    if err != nil {
-        log.Fatal(err)
+    if result.Error != nil {
+        return 0, result.Error
+    }
+    return result.RowsAffected, nil
+}
+*/
+
+func (hdb *HiscoresDb) Select(topN int, key string) ([]HiscoreWithMap, error) {
+    var pks []int64
+    result := hdb.db.Raw(`
+        select h.id from hiscores h
+        inner join hiscore_values hv
+        on h.id = hv.hiscore_id
+        where lower(hv.key) = lower(?)
+        order by hv.value desc limit ?
+    `, key, topN).Scan(&pks)
+    if result.Error != nil {
+        return nil, result.Error
+    }
+    if len(pks) == 0 {
+        return []HiscoreWithMap{}, nil
     }
 
-    rowsAffected, err := result.RowsAffected()
-    if err != nil {
-        log.Fatal(err)
+    var results []Hiscore
+    result = hdb.db.Preload("HiscoreValues").Find(&results, pks)
+    if result.Error != nil {
+        return nil, result.Error
+    }
+    if len(results) == 0 {
+        return nil, errors.New("Unexpected: Zero results but initially not zero")
+    }
+    results2 := make([]HiscoreWithMap, 0, len(results))
+    for i := range results {
+        results2 = append(results2, results[i].withMap())
     }
 
-    return rowsAffected
+    sort.Sort(&MaxSortedHiscores { rows: results2, key: key })
+
+    return results2, nil
 }
 
-func (hdb *HiscoresDb) Select(topN int) []HiscoreEntry {
-    rows, err := hdb.db.Query(
-        "select * from (select *, row_number() over (order by kills desc) as rn from hiscores order by rn desc) where rn <= ?",
-        topN,
-    )
-    if err != nil {
-        log.Fatal(err)
+func (hdb *HiscoresDb) Insert(entries []Hiscore) error {
+    result := hdb.db.Create(entries)
+    if result.Error != nil {
+        return result.Error
     }
-    defer rows.Close()
-
-    results := make([]HiscoreEntry, 0)
-    var unixTimeHolder int64
-    var rowNumHolder int
-    for rows.Next() {
-
-        h := HiscoreEntry {}
-        err = rows.Scan(&h.Id, &h.Name, &h.Team, &h.Kills, &h.Deaths, &h.Bounty, &unixTimeHolder, &rowNumHolder)
-        if err != nil {
-            log.Fatal(err)
-        }
-        unixTime := time.Unix(unixTimeHolder, 0)
-        h.Timestamp = &unixTime
-
-        results = append(results, h)
-    }
-    err = rows.Err()
-    if err != nil {
-        log.Fatal(err)
-    }
-    return results
-}
-
-// PK is autoincrement, timestamp is generated and replaced
-func (hdb *HiscoresDb) Insert(entries []HiscoreEntry) {
-    stmt, err := hdb.db.Prepare("insert into hiscores (name, team, kills, deaths, bounty, timestamp) values (?, ?, ?, ?, ?, ?)")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer stmt.Close()
-
-    for _, entry := range entries {
-        _, err = stmt.Exec(entry.Name, entry.Team, entry.Kills, entry.Deaths, entry.Bounty, time.Now().Unix())
-        if err != nil {
-            log.Fatal(err)
-        }
-    }
+    return nil
 }

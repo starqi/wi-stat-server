@@ -1,1 +1,1 @@
-bad stat server for drool zone
+Simple stat server and chat server for WebInf.
