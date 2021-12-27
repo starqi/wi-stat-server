@@ -10,8 +10,8 @@ import (
 //////////////////////////////////////////////////
 
 type HiscoreWithMap struct {
-    hiscore *Hiscore
-    valueMap map[string]int64
+    Hiscore *Hiscore
+    ValueMap map[string]int64
 }
 
 func (r *Hiscore) withMap() HiscoreWithMap {
@@ -19,7 +19,7 @@ func (r *Hiscore) withMap() HiscoreWithMap {
     for _, v := range r.HiscoreValues {
         valueMap[v.Key] = v.Value
     }
-    return HiscoreWithMap { hiscore: r, valueMap: valueMap }
+    return HiscoreWithMap { Hiscore: r, ValueMap: valueMap }
 }
 
 //////////////////////////////////////////////////
@@ -34,7 +34,7 @@ func (r *MaxSortedHiscores) Len() int {
 }
 
 func (r *MaxSortedHiscores) Less(i, j int) bool {
-    return r.rows[i].valueMap[r.key] > r.rows[j].valueMap[r.key]
+    return r.rows[i].ValueMap[r.key] > r.rows[j].ValueMap[r.key]
 
 }
 
@@ -75,6 +75,17 @@ func (hdb *HiscoresDbTransaction) Commit() {
     hdb.db.Commit()
 }
 
+func (hdb *HiscoresDb) Transaction(do func (tx *HiscoresDbTransaction) (interface{}, error)) (interface{}, error) {
+    tx := hdb.MakeTransaction()
+    result, err := do(&tx)
+    if err != nil {
+        tx.Rollback()
+    } else {
+        tx.Commit()
+    }
+    return result, err
+}
+
 func (hdb *HiscoresDbTransaction) Cull(bottomN int64, key string) (int64, error) {
     result := hdb.db.Exec(
         `
@@ -82,7 +93,7 @@ func (hdb *HiscoresDbTransaction) Cull(bottomN int64, key string) (int64, error)
             select h.id from hiscores h
             inner join hiscore_values hv
             on h.id = hv.hiscore_id
-            where lower(hv.key) = lower(?)
+            where hv.key = ?
             order by hv.value asc limit ?
         );
         `, key, bottomN,
@@ -99,7 +110,7 @@ func (hdb *HiscoresDbTransaction) Select(topN int, key string) ([]HiscoreWithMap
         select h.id from hiscores h
         inner join hiscore_values hv
         on h.id = hv.hiscore_id
-        where lower(hv.key) = lower(?)
+        where hv.key = ?
         order by hv.value desc limit ?
     `, key, topN).Scan(&pks)
     if result.Error != nil {
@@ -127,10 +138,10 @@ func (hdb *HiscoresDbTransaction) Select(topN int, key string) ([]HiscoreWithMap
     return results2, nil
 }
 
-func (hdb *HiscoresDbTransaction) Insert(entries []Hiscore) error {
+func (hdb *HiscoresDbTransaction) Insert(entries []Hiscore) (int64, error) {
     result := hdb.db.Create(entries)
     if result.Error != nil {
-        return result.Error
+        return 0, result.Error
     }
-    return nil
+    return result.RowsAffected, nil
 }

@@ -13,6 +13,7 @@ var hdb *HiscoresDb
 
 func TestCull(t *testing.T) {
     tx := hdb.MakeTransaction()
+    defer tx.Rollback()
 
     tx.Insert([]Hiscore {
         {
@@ -63,16 +64,15 @@ func TestCull(t *testing.T) {
     if len(topKills) != 1 {
         t.Fatalf("Expected 1 remaining row, got %d", len(topKills))
     }
-    remainingIq := topKills[0].hiscore.withMap().valueMap["IQ"]
+    remainingIq := topKills[0].Hiscore.withMap().ValueMap["IQ"]
     if remainingIq != 77 {
         t.Fatalf("Expected remaining IQ to be 77, got %d", remainingIq)
     }
-
-    tx.Rollback()
 }
 
 func TestInsertAndSelectTop(t *testing.T) {
     tx := hdb.MakeTransaction()
+    defer tx.Rollback();
 
     tx.Insert([]Hiscore {
         {
@@ -101,14 +101,14 @@ func TestInsertAndSelectTop(t *testing.T) {
     if len(topKills) != 1 {
         t.Fatalf("Expected 1 row, got %d", len(topKills))
     }
-    if topKills[0].hiscore.Name != "Bob" {
-        t.Fatalf("Expected Bob, got %s", topKills[0].hiscore.Name)
+    if topKills[0].Hiscore.Name != "Bob" {
+        t.Fatalf("Expected Bob, got %s", topKills[0].Hiscore.Name)
     }
-    valuesLen := len(topKills[0].hiscore.HiscoreValues)
+    valuesLen := len(topKills[0].Hiscore.HiscoreValues)
     if valuesLen != 4 {
         t.Fatalf("Expected 4 values for Bob, got %d", valuesLen)
     }
-    if topKills[0].valueMap["BobOnlyRecord"] != 444 {
+    if topKills[0].ValueMap["BobOnlyRecord"] != 444 {
         t.Fatalf("Expected BobOnlyRecord to exist and be 444")
     }
 
@@ -119,13 +119,13 @@ func TestInsertAndSelectTop(t *testing.T) {
     if len(topDeaths) != 2 {
         t.Fatalf("Expected 2 rows, got %d", len(topDeaths))
     }
-    if topDeaths[0].hiscore.Name != "Jill" {
-        t.Fatalf("Expected Jill, got %s", topDeaths[0].hiscore.Name)
+    if topDeaths[0].Hiscore.Name != "Jill" {
+        t.Fatalf("Expected Jill, got %s", topDeaths[0].Hiscore.Name)
     }
-    if topDeaths[1].hiscore.Name != "Bob" {
-        t.Fatalf("Expected Bob, got %s", topDeaths[1].hiscore.Name)
+    if topDeaths[1].Hiscore.Name != "Bob" {
+        t.Fatalf("Expected Bob, got %s", topDeaths[1].Hiscore.Name)
     }
-    valuesLen = len(topDeaths[0].hiscore.HiscoreValues)
+    valuesLen = len(topDeaths[0].Hiscore.HiscoreValues)
     if valuesLen != 3 {
         t.Fatalf("Expected 3 values for Jill, got %d", valuesLen)
     }
@@ -137,8 +137,6 @@ func TestInsertAndSelectTop(t *testing.T) {
     if len(topUnknown) != 0 {
         t.Fatalf("Expected 0 rows, got %d", len(topUnknown))
     }
-
-    tx.Rollback();
 }
 
 func TestMain(m *testing.M) {
