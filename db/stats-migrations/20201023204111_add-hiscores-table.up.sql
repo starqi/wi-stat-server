@@ -10,7 +10,7 @@ create table hiscore_values (
     key text not null,
     value integer not null,
     
-    foreign key (hiscore_id) references hiscores (id)
+    foreign key (hiscore_id) references hiscores (id) on delete cascade
 );
 
 create index hiscore_values_value_idx on hiscore_values (value);

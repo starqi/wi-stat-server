@@ -7,17 +7,7 @@ import (
     "sort"
 )
 
-type HiscoresDb struct {
-    db *gorm.DB
-}
-
-func MakeHiscoresDb(sqliteDbPath string) (*HiscoresDb, error) {
-    db, err := gorm.Open(sqlite.Open(sqliteDbPath), &gorm.Config{})
-    if err != nil {
-        return nil, err
-    }
-    return &HiscoresDb { db }, nil
-}
+//////////////////////////////////////////////////
 
 type HiscoreWithMap struct {
     hiscore *Hiscore
@@ -31,6 +21,8 @@ func (r *Hiscore) withMap() HiscoreWithMap {
     }
     return HiscoreWithMap { hiscore: r, valueMap: valueMap }
 }
+
+//////////////////////////////////////////////////
 
 type MaxSortedHiscores struct {
     rows []HiscoreWithMap
@@ -52,25 +44,56 @@ func (r *MaxSortedHiscores) Swap(i, j int) {
     r.rows[j] = t
 }
 
-/*
-func (hdb *HiscoresDb) Cull(topN int64) (int64, error) {
+//////////////////////////////////////////////////
+
+type HiscoresDbTransaction struct {
+    hdb *HiscoresDb
+    db *gorm.DB
+}
+
+type HiscoresDb struct {
+    db *gorm.DB
+}
+
+func MakeHiscoresDb(sqliteDbPath string) (*HiscoresDb, error) {
+    db, err := gorm.Open(sqlite.Open(sqliteDbPath), &gorm.Config{})
+    if err != nil {
+        return nil, err
+    }
+    return &HiscoresDb { db }, nil
+}
+
+func (hdb *HiscoresDb) MakeTransaction() HiscoresDbTransaction {
+    return HiscoresDbTransaction { hdb: hdb, db: hdb.db.Begin() }
+}
+
+func (hdb *HiscoresDbTransaction) Rollback() {
+    hdb.db.Rollback()
+}
+
+func (hdb *HiscoresDbTransaction) Commit() {
+    hdb.db.Commit()
+}
+
+func (hdb *HiscoresDbTransaction) Cull(bottomN int64, key string) (int64, error) {
     result := hdb.db.Exec(
         `
-        delete from hiscores where id not in (
-            with ranked as (select id, row_number() over (order by kills desc) as rn from hiscores order by rn desc)
-            select id from ranked where rn <= ?
+        delete from hiscores where id in (
+            select h.id from hiscores h
+            inner join hiscore_values hv
+            on h.id = hv.hiscore_id
+            where lower(hv.key) = lower(?)
+            order by hv.value asc limit ?
         );
-        `,
-        topN,
+        `, key, bottomN,
     )
     if result.Error != nil {
         return 0, result.Error
     }
     return result.RowsAffected, nil
 }
-*/
 
-func (hdb *HiscoresDb) Select(topN int, key string) ([]HiscoreWithMap, error) {
+func (hdb *HiscoresDbTransaction) Select(topN int, key string) ([]HiscoreWithMap, error) {
     var pks []int64
     result := hdb.db.Raw(`
         select h.id from hiscores h
@@ -104,7 +127,7 @@ func (hdb *HiscoresDb) Select(topN int, key string) ([]HiscoreWithMap, error) {
     return results2, nil
 }
 
-func (hdb *HiscoresDb) Insert(entries []Hiscore) error {
+func (hdb *HiscoresDbTransaction) Insert(entries []Hiscore) error {
     result := hdb.db.Create(entries)
     if result.Error != nil {
         return result.Error

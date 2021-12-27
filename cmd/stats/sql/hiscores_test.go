@@ -11,8 +11,70 @@ import (
 
 var hdb *HiscoresDb
 
+func TestCull(t *testing.T) {
+    tx := hdb.MakeTransaction()
+
+    tx.Insert([]Hiscore {
+        {
+            Name: "Bob",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 9001 },
+                { Key: "Deaths", Value: 2 },
+                { Key: "IQ", Value: 3 },
+                { Key: "BobOnlyRecord", Value: 444 },
+            },
+        },
+        {
+            Name: "Jill",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 2 },
+                { Key: "Deaths", Value: 9009 },
+                { Key: "IQ", Value: 3 },
+            },
+        },
+        {
+            Name: "Jack",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 2 },
+                { Key: "Deaths", Value: 9009 },
+                { Key: "IQ", Value: 77 },
+            },
+        },
+    })
+
+    eqCulled, err := tx.Cull(2, "EQ")
+    if err != nil {
+        t.Error(err)
+    }
+    if eqCulled != 0 {
+        t.Fatalf("Expected 0 EQ culls, got %d", eqCulled)
+    }
+    iqCulled, err := tx.Cull(2, "IQ")
+    if err != nil {
+        t.Error(err)
+    }
+    if iqCulled != 2 {
+        t.Fatalf("Expected 2 IQ culls, got %d", iqCulled)
+    }
+    topKills, err := tx.Select(5, "Kills")
+    if err != nil {
+        t.Error(err)
+    }
+    if len(topKills) != 1 {
+        t.Fatalf("Expected 1 remaining row, got %d", len(topKills))
+    }
+    remainingIq := topKills[0].hiscore.withMap().valueMap["IQ"]
+    if remainingIq != 77 {
+        t.Fatalf("Expected remaining IQ to be 77, got %d", remainingIq)
+    }
+
+    tx.Rollback()
+}
+
 func TestInsertAndSelectTop(t *testing.T) {
-    hdb.Insert([]Hiscore {
+    tx := hdb.MakeTransaction()
+
+    tx.Insert([]Hiscore {
         {
             Name: "Bob",
             HiscoreValues: []HiscoreValue {
@@ -32,7 +94,7 @@ func TestInsertAndSelectTop(t *testing.T) {
         },
     })
 
-    topKills, err := hdb.Select(1, "Kills")
+    topKills, err := tx.Select(1, "Kills")
     if err != nil {
         t.Error(err)
     }
@@ -50,7 +112,7 @@ func TestInsertAndSelectTop(t *testing.T) {
         t.Fatalf("Expected BobOnlyRecord to exist and be 444")
     }
 
-    topDeaths, err := hdb.Select(55, "Deaths")
+    topDeaths, err := tx.Select(55, "Deaths")
     if err != nil {
         t.Error(err)
     }
@@ -68,13 +130,15 @@ func TestInsertAndSelectTop(t *testing.T) {
         t.Fatalf("Expected 3 values for Jill, got %d", valuesLen)
     }
 
-    topUnknown, err := hdb.Select(5, "Unknown")
+    topUnknown, err := tx.Select(5, "Unknown")
     if err != nil {
         t.Error(err)
     }
     if len(topUnknown) != 0 {
         t.Fatalf("Expected 0 rows, got %d", len(topUnknown))
     }
+
+    tx.Rollback();
 }
 
 func TestMain(m *testing.M) {
