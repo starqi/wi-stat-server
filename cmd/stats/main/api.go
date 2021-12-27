@@ -21,7 +21,6 @@ type HiscoreEntry struct {
     Kills int64 `json:"kills"`
     Deaths int64 `json:"deaths"`
     Bounty int64 `json:"bounty"`
-    Timestamp uint64 `json:"timestamp"`
     CharSpecName string `json:"charSpecName"`
     ExtraValues map[string]int64 `json:"extraValues"`
 }
@@ -29,6 +28,8 @@ type HiscoreEntry struct {
 const cullTickerSeconds = 60
 const topNToKeep = 10
 const signatureHeader = "signature"
+const relativeDbPathEnv = "relativeDbPath"
+const postPublicKeyEnv = "postPublicKey"
 
 var hdb *hsql.HiscoresDb
 var cullTicker *time.Ticker
@@ -50,9 +51,9 @@ func cullTickerFunc() {
 
 func main() {
 
-    postPublicKeyHeader := os.Getenv("POST_PUBLIC_KEY")
+    postPublicKeyHeader := os.Getenv(postPublicKeyEnv)
     if postPublicKeyHeader == "" {
-        log.Print("No POST public key found, will not be able to update")
+        log.Printf("Missing %s, will not be able to update", postPublicKeyEnv)
     } else {
         _postPublicKeyIsolated, _ := pem.Decode([]byte(postPublicKeyHeader))
         _postPublicKeyParsed, err := x509.ParsePKCS1PublicKey(_postPublicKeyIsolated.Bytes)
@@ -63,7 +64,12 @@ func main() {
         log.Print("Found POST public key")
     }
 
-    _hdb, err := hsql.MakeHiscoresDb("./dist/db.db")
+    relativeDbPath := os.Getenv(relativeDbPathEnv)
+    if relativeDbPath == "" {
+        log.Fatalf("Missing %s", relativeDbPath)
+    }
+
+    _hdb, err := hsql.MakeHiscoresDb(relativeDbPath)
     hdb = _hdb
     if err != nil {
         log.Fatal("Could not access DB", err)
@@ -88,7 +94,7 @@ func main() {
     basicAuthGroup.POST("", postHiscore)
 
     router.GET("/top", getTopHiscores)
-    router.Run()
+    router.Run() // Will use PORT env var
 }
 
 func checkSignature(c * gin.Context) {
@@ -155,13 +161,18 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
         for key, val := range j.ExtraValues {
             hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: key, Value: val })
         }
-        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "Kills", Value: j.Kills })
-        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "Deaths", Value: j.Deaths })
-        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "Bounty", Value: j.Bounty })
+        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "kills", Value: j.Kills })
+        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "deaths", Value: j.Deaths })
+        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "bounty", Value: j.Bounty })
+
+        hiscoreData := make([]hsql.HiscoreData, 0)
+        hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "team", Value: j.Team })
+        hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "charSpecName", Value: j.CharSpecName })
 
         result = append(result, hsql.Hiscore {
             Name: j.Name,
             HiscoreValues: hiscoreValues,
+            HiscoreData: hiscoreData,
         })
     }
     return result
@@ -170,15 +181,23 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
 func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
     result := make([]HiscoreEntry, 0, len(hiscores))
     for _, h := range hiscores {
+        
+        extraValues := make(map[string]int64)
+        for key, value := range h.ValueMap {
+            extraValues[key] = value
+        }
+        delete(extraValues, "kills")
+        delete(extraValues, "deaths")
+        delete(extraValues, "bounty")
+
         result = append(result, HiscoreEntry {
             Name: h.Hiscore.Name,
-            Team: "FIXME",
+            Team: h.DataMap["team"],
             Kills: h.ValueMap["kills"],
             Deaths: h.ValueMap["deaths"],
             Bounty: h.ValueMap["bounty"],
-            Timestamp: h.Hiscore.CreatedAt,
-            CharSpecName: "FIXME",
-            ExtraValues: h.ValueMap,
+            CharSpecName: h.DataMap["charSpecName"],
+            ExtraValues: extraValues,
         })
     }
     return result

@@ -1,12 +1,7 @@
 package sql
 
 import (
-     "log"
     "testing"
-    "os"
-    migrate "github.com/golang-migrate/migrate/v4"
-    _ "github.com/golang-migrate/migrate/v4/database/sqlite3"
-    _ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var hdb *HiscoresDb
@@ -83,6 +78,9 @@ func TestInsertAndSelectTop(t *testing.T) {
                 { Key: "IQ", Value: 3 },
                 { Key: "BobOnlyRecord", Value: 444 },
             },
+            HiscoreData: []HiscoreData {
+                { Key: "MVP", Value: "MVP" },
+            },
         },
         {
             Name: "Jill",
@@ -90,6 +88,9 @@ func TestInsertAndSelectTop(t *testing.T) {
                 { Key: "Kills", Value: 2 },
                 { Key: "Deaths", Value: 9009 },
                 { Key: "IQ", Value: 3 },
+            },
+            HiscoreData: []HiscoreData {
+                { Key: "Worst Player", Value: "Worst Player" },
             },
         },
     })
@@ -108,8 +109,13 @@ func TestInsertAndSelectTop(t *testing.T) {
     if valuesLen != 4 {
         t.Fatalf("Expected 4 values for Bob, got %d", valuesLen)
     }
-    if topKills[0].ValueMap["BobOnlyRecord"] != 444 {
-        t.Fatalf("Expected BobOnlyRecord to exist and be 444")
+    bobOnlyRecord := topKills[0].ValueMap["BobOnlyRecord"]
+    if bobOnlyRecord != 444 {
+        t.Fatalf("Expected BobOnlyRecord to exist and be 444, got %d", bobOnlyRecord)
+    }
+    mvp := topKills[0].DataMap["MVP"]
+    if mvp != "MVP" {
+        t.Fatalf("Expected MVP to exist and be MVP, got %s", mvp)
     }
 
     topDeaths, err := tx.Select(55, "Deaths")
@@ -140,27 +146,6 @@ func TestInsertAndSelectTop(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-    const testDbPath = "../../../dist/test-db.db"
-    err := os.Remove(testDbPath)
-    if err != nil {
-        log.Print("Failed to remove existing DB - ", err)
-    }
-
-    migrate, err := migrate.New("file://../../../db/stats-migrations", "sqlite3://" + testDbPath)
-    if err != nil {
-        log.Fatal("Failed to create migration class - ", err)
-    }
-
-    err = migrate.Up()
-    if err != nil {
-        log.Fatal("Failed to create test DB - ", err)
-    }
-
-    _hdb, err := MakeHiscoresDb(testDbPath)
-    if err != nil {
-        log.Fatal("Could not access DB - ", err)
-    }
-    hdb = _hdb
-
+    hdb = RemakeTestDb()
     m.Run()
 }

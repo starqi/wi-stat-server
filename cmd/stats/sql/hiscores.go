@@ -12,6 +12,7 @@ import (
 type HiscoreWithMap struct {
     Hiscore *Hiscore
     ValueMap map[string]int64
+    DataMap map[string]string
 }
 
 func (r *Hiscore) withMap() HiscoreWithMap {
@@ -19,7 +20,13 @@ func (r *Hiscore) withMap() HiscoreWithMap {
     for _, v := range r.HiscoreValues {
         valueMap[v.Key] = v.Value
     }
-    return HiscoreWithMap { Hiscore: r, ValueMap: valueMap }
+
+    dataMap := make(map[string]string)
+    for _, v := range r.HiscoreData {
+        dataMap[v.Key] = v.Value
+    }
+
+    return HiscoreWithMap { Hiscore: r, ValueMap: valueMap, DataMap: dataMap }
 }
 
 //////////////////////////////////////////////////
@@ -121,7 +128,7 @@ func (hdb *HiscoresDbTransaction) Select(topN int, key string) ([]HiscoreWithMap
     }
 
     var results []Hiscore
-    result = hdb.db.Preload("HiscoreValues").Find(&results, pks)
+    result = hdb.db.Preload("HiscoreData").Preload("HiscoreValues").Find(&results, pks)
     if result.Error != nil {
         return nil, result.Error
     }

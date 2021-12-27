@@ -14,3 +14,12 @@ create table hiscore_values (
 );
 
 create index hiscore_values_value_idx on hiscore_values (value);
+
+create table hiscore_data (
+    id integer not null primary key autoincrement,
+    hiscore_id integer not null,
+    key text not null,
+    value text not null,
+    
+    foreign key (hiscore_id) references hiscores (id) on delete cascade
+);
