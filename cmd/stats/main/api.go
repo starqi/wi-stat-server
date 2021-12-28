@@ -2,7 +2,9 @@ package main
 
 import (
     "time"
+    "bytes"
     "net/http"
+    "io/ioutil"
     "log"
     "github.com/gin-gonic/gin"
     "os"
@@ -10,7 +12,9 @@ import (
     "crypto/x509"
     "crypto/sha256"
     "encoding/pem"
+    "encoding/base64"
     "crypto"
+    "strconv"
     hsql "github.com/starqi/wi-util-servers/cmd/stats/sql"
 )
 
@@ -20,14 +24,15 @@ type HiscoreEntry struct {
     Team string `json:"team"`
     Kills int64 `json:"kills"`
     Deaths int64 `json:"deaths"`
-    Bounty int64 `json:"bounty"`
-    CharSpecName string `json:"charSpecName"`
+    ClassName string `json:"className"`
     ExtraValues map[string]int64 `json:"extraValues"`
+    ExtraData map[string]string `json:"extraData"`
 }
 
+const maxTopHiscores = 10
 const cullTickerSeconds = 60
 const topNToKeep = 10
-const signatureHeader = "signature"
+const signatureHeader = "x-json-signature"
 const relativeDbPathEnv = "relativeDbPath"
 const postPublicKeyEnv = "postPublicKey"
 
@@ -51,17 +56,18 @@ func cullTickerFunc() {
 
 func main() {
 
-    postPublicKeyHeader := os.Getenv(postPublicKeyEnv)
-    if postPublicKeyHeader == "" {
+    postPublicKeyInput := os.Getenv(postPublicKeyEnv)
+    if postPublicKeyInput == "" {
         log.Printf("Missing %s, will not be able to update", postPublicKeyEnv)
     } else {
-        _postPublicKeyIsolated, _ := pem.Decode([]byte(postPublicKeyHeader))
+        _postPublicKeyIsolated, _ := pem.Decode([]byte(postPublicKeyInput))
         _postPublicKeyParsed, err := x509.ParsePKCS1PublicKey(_postPublicKeyIsolated.Bytes)
         if err != nil {
-            log.Print("Failed to parse POST public key, will not be able to update", err)
+            log.Print("Failed to parse POST public key, will not be able to update, ", postPublicKeyInput, ", ", err)
+        } else {
+            postPublicKey = _postPublicKeyParsed
+            log.Print("Parsed POST public key - ", postPublicKeyInput)
         }
-        postPublicKey = _postPublicKeyParsed
-        log.Print("Found POST public key")
     }
 
     relativeDbPath := os.Getenv(relativeDbPathEnv)
@@ -90,35 +96,61 @@ func main() {
         }
     })
 
-    basicAuthGroup := router.Group("/hiscore", checkSignature)
-    basicAuthGroup.POST("", postHiscore)
+    authGroup := router.Group("/hiscore", checkSignature)
+    authGroup.POST("", postHiscore)
 
-    router.GET("/top", getTopHiscores)
+    router.GET("hiscore/top", getTopHiscores)
     router.Run() // Will use PORT env var
 }
 
 func checkSignature(c * gin.Context) {
     if postPublicKey == nil {
-        c.Status(http.StatusUnauthorized)
+        c.AbortWithStatus(http.StatusUnauthorized)
     } else {
-        rawData, err := c.GetRawData()
+        rawData, err := ioutil.ReadAll(c.Request.Body)
         if err != nil {
-            log.Print("Failed to get raw data")
-            c.Status(http.StatusInternalServerError)
+            log.Print("Failed to get body, ", c.ClientIP())
+            c.AbortWithStatus(http.StatusInternalServerError)
             return
         }
+        // Must manually ensure body reader is not stuck at EOF 
+        c.Request.Body = ioutil.NopCloser(bytes.NewReader(rawData))
+
         hash := sha256.Sum256(rawData)
-        sig := c.GetHeader(signatureHeader)
-        err = rsa.VerifyPKCS1v15(postPublicKey, crypto.SHA256, hash[:], []byte(sig))
+        sigBase64 := c.GetHeader(signatureHeader)
+        sigBytes, err := base64.StdEncoding.DecodeString(sigBase64)
         if err != nil {
-            c.Status(http.StatusUnauthorized)
+            log.Print("Failed to read base64 signature, ", err)
+            c.AbortWithStatus(http.StatusInternalServerError)
+        }
+
+        err = rsa.VerifyPKCS1v15(postPublicKey, crypto.SHA256, hash[:], sigBytes)
+        if err != nil {
+            log.Print("Failed to verify signature, ", c.ClientIP())
+            c.AbortWithStatus(http.StatusUnauthorized)
         }
     }
+
+    c.Next()
 }
 
 func getTopHiscores(c *gin.Context) {
+    field := c.Query("field")
+    if field == "" {
+        c.Status(http.StatusBadRequest)
+        c.Writer.Write([]byte("Missing field param"))
+        return
+    }
+
+    _num := c.Query("num")
+
+    num, err := strconv.Atoi(_num)
+    if err != nil || num > maxTopHiscores {
+        num = maxTopHiscores
+    }
+
     result, err := hdb.Transaction(func (tx *hsql.HiscoresDbTransaction) (interface{}, error) {
-        return tx.Select(10, "kills")
+        return tx.Select(num, field)
     })
     if err != nil {
         log.Print("Failed to get top hiscores - ", err)
@@ -163,11 +195,13 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
         }
         hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "kills", Value: j.Kills })
         hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "deaths", Value: j.Deaths })
-        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "bounty", Value: j.Bounty })
 
         hiscoreData := make([]hsql.HiscoreData, 0)
+        for key, val := range j.ExtraData {
+            hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: key, Value: val })
+        }
         hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "team", Value: j.Team })
-        hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "charSpecName", Value: j.CharSpecName })
+        hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "className", Value: j.ClassName })
 
         result = append(result, hsql.Hiscore {
             Name: j.Name,
@@ -188,16 +222,22 @@ func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
         }
         delete(extraValues, "kills")
         delete(extraValues, "deaths")
-        delete(extraValues, "bounty")
+
+        extraData := make(map[string]string)
+        for key, value := range h.DataMap {
+            extraData[key] = value
+        }
+        delete(extraData, "team")
+        delete(extraData, "className")
 
         result = append(result, HiscoreEntry {
             Name: h.Hiscore.Name,
             Team: h.DataMap["team"],
             Kills: h.ValueMap["kills"],
             Deaths: h.ValueMap["deaths"],
-            Bounty: h.ValueMap["bounty"],
-            CharSpecName: h.DataMap["charSpecName"],
+            ClassName: h.DataMap["className"],
             ExtraValues: extraValues,
+            ExtraData: extraData,
         })
     }
     return result
