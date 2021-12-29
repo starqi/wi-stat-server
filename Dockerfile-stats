@@ -1,6 +1,9 @@
-FROM golang:1.15.8-alpine
-# PORT is read by Gin
+FROM golang:1.17.5-alpine3.15
+
 ENV PORT=8082
+ENV relativeDbPath=../../../dist/test-db.db
+ENV postPublicKey=
+
 WORKDIR /go/src/wi-util-servers
 COPY .. .
 
@@ -9,9 +12,15 @@ RUN apk add --no-cache build-base; \
     apk add --no-cache sqlite; \
     apk add --no-cache git; \
     go install -v ./...
+    
+ENV TAG=v4.1.0
+RUN cd /; \
+    go get -u -d github.com/golang-migrate/migrate/cmd/migrate; \
+    cd $GOPATH/src/github.com/golang-migrate/migrate/cmd/migrate; \
+    git checkout $TAG; \
+    go install -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@$TAG
 
-RUN cd ./scripts; \
-    bash install-migrate-lib.sh; \
-    echo IPressedEnter | bash migrate.sh
+RUN cd /go/src/wi-util-servers/scripts; \
+    bash migrate.sh
 
-ENTRYPOINT stats
+ENTRYPOINT main

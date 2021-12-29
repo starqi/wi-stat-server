@@ -71,7 +71,7 @@ func main() {
 
     relativeDbPath := os.Getenv(relativeDbPathEnv)
     if relativeDbPath == "" {
-        log.Fatalf("Missing %s", relativeDbPath)
+        log.Fatalf("Missing %s", relativeDbPathEnv)
     }
 
     _hdb, err := hsql.MakeHiscoresDb(relativeDbPath)
