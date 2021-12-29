@@ -1,5 +1,4 @@
 FROM golang:1.17.5-alpine3.15
-# PORT is read by Gin
 ENV PORT=8081
 WORKDIR /go/src/wi-util-servers
 COPY .. .

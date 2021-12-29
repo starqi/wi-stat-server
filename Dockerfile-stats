@@ -1,7 +1,7 @@
 FROM golang:1.17.5-alpine3.15
 
 ENV PORT=8082
-ENV relativeDbPath=../../../dist/test-db.db
+ENV relativeDbPath=./dist/test-db.db
 ENV postPublicKey=
 
 WORKDIR /go/src/wi-util-servers

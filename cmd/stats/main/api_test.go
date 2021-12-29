@@ -19,9 +19,9 @@ import (
 func TestPostThenGetTop(t *testing.T) {
     json := `
         [
-            {"name": "Bill", "team": "Sutasu", "kills": 0, "deaths": 44, "className": "Medic", "extraValues": {"healed": 1}, "extraData": {"mvp": "MVP"}},
-            {"name": "Joshy", "team": "Sutasu", "kills": 5, "deaths": 3, "className": "Marine", "extraData": {"mvp": "MVP"}},
-            {"name": "Alexandria", "team": "Sutasu", "kills": 11, "deaths": 0, "className": "Marine"}
+            {"name": "Bill", "team": "Sutasu", "kills": 0, "deaths": 44, "className": "Medic", "bounty": 34, "bountyColor": "red", "extraValues": {"healed": 1}, "extraData": {"mvp": "MVP"}},
+            {"name": "Joshy", "team": "Sutasu", "kills": 5, "deaths": 3, "bounty": 34, "bountyColor": "red", "className": "Marine", "extraData": {"mvp": "MVP"}},
+            {"name": "Alexandria", "bounty": 34, "bountyColor": "red", "team": "Sutasu", "kills": 11, "deaths": 0, "className": "Marine"}
         ]
     `
     jsonHash := sha256.Sum256([]byte(json))

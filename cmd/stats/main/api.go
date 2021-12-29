@@ -25,6 +25,8 @@ type HiscoreEntry struct {
     Kills int64 `json:"kills"`
     Deaths int64 `json:"deaths"`
     ClassName string `json:"className"`
+    Bounty int64 `json:"bounty"`
+    BountyColor string `json:"bountyColor"`
     ExtraValues map[string]int64 `json:"extraValues"`
     ExtraData map[string]string `json:"extraData"`
 }
@@ -194,6 +196,7 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
         }
         hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "kills", Value: j.Kills })
         hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "deaths", Value: j.Deaths })
+        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "bounty", Value: j.Bounty })
 
         hiscoreData := make([]hsql.HiscoreData, 0)
         for key, val := range j.ExtraData {
@@ -201,6 +204,7 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
         }
         hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "team", Value: j.Team })
         hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "className", Value: j.ClassName })
+        hiscoreData = append(hiscoreData, hsql.HiscoreData { Key: "bountyColor", Value: j.BountyColor })
 
         result = append(result, hsql.Hiscore {
             Name: j.Name,
@@ -221,6 +225,7 @@ func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
         }
         delete(extraValues, "kills")
         delete(extraValues, "deaths")
+        delete(extraValues, "bounty")
 
         extraData := make(map[string]string)
         for key, value := range h.DataMap {
@@ -228,6 +233,7 @@ func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
         }
         delete(extraData, "team")
         delete(extraData, "className")
+        delete(extraData, "bountyColor")
 
         result = append(result, HiscoreEntry {
             Name: h.Hiscore.Name,
@@ -235,6 +241,8 @@ func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
             Kills: h.ValueMap["kills"],
             Deaths: h.ValueMap["deaths"],
             ClassName: h.DataMap["className"],
+            Bounty: h.ValueMap["bounty"],
+            BountyColor: h.DataMap["bountyColor"],
             ExtraValues: extraValues,
             ExtraData: extraData,
         })
