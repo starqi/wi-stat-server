@@ -36,22 +36,21 @@ const signatureHeader = "x-json-signature"
 const relativeDbPathEnv = "relativeDbPath"
 const postPublicKeyEnv = "postPublicKey"
 
+var cullColumns = []string{ "kills", "healed", "bounty" }
 var hdb *hsql.HiscoresDb
 var cullTicker *time.Ticker
 var postPublicKey *rsa.PublicKey
 
 func cullTickerFunc() {
-    /*
     for {
         <-cullTicker.C
-        tx := hdb.MakeTransaction()
-        rowsAffected := tx.Cull(topNToKeep)
-        tx.Commit()
-        if rowsAffected > 0 {
-            log.Print("Culled ", rowsAffected, " rows")
+        _, err := hdb.Transaction(func (tx *hsql.HiscoresDbTransaction) (interface{}, error) {
+            return tx.Cull(topNToKeep, cullColumns)
+        })
+        if err != nil {
+            log.Print("Failed to cull, rolled back - ", err)
         }
     }
-    */
 }
 
 func main() {

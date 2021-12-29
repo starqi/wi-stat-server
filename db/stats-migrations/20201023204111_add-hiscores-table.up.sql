@@ -14,6 +14,7 @@ create table hiscore_values (
 );
 
 create index hiscore_values_value_idx on hiscore_values (value);
+create index hiscore_values_hiscore_id_idx on hiscore_values (hiscore_id);
 
 create table hiscore_data (
     id integer not null primary key autoincrement,

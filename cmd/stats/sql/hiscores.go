@@ -1,10 +1,13 @@
 package sql
 
 import (
+    "strings"
     "errors"
+    "log"
     "gorm.io/gorm"
     "gorm.io/driver/sqlite"
     "sort"
+    "strconv"
 )
 
 //////////////////////////////////////////////////
@@ -93,21 +96,57 @@ func (hdb *HiscoresDb) Transaction(do func (tx *HiscoresDbTransaction) (interfac
     return result, err
 }
 
-func (hdb *HiscoresDbTransaction) Cull(bottomN int64, key string) (int64, error) {
-    result := hdb.db.Exec(
-        `
-        delete from hiscores where id in (
-            select h.id from hiscores h
+func (hdb *HiscoresDbTransaction) Cull(topNToKeep int64, columns []string) (int64, error) {
+
+    if len(columns) <= 0 {
+        return 0, errors.New("Column count must be > 0")
+    }
+
+    log.Printf("Starting cull for top %d, columns %v", topNToKeep, columns)
+
+    const withFragmentTemplate = ` as (select h.id from hiscores h
+        inner join hiscore_values hv 
+        on h.id = hv.hiscore_id
+        where hv.key = ? and hv.value in (
+            select distinct hv.value from hiscores h
             inner join hiscore_values hv
             on h.id = hv.hiscore_id
-            where hv.key = ?
-            order by hv.value asc limit ?
-        );
-        `, key, bottomN,
-    )
+            where hv.key = ? order by hv.value desc limit ?
+        ))`
+
+    var b strings.Builder
+    b.WriteString("delete from hiscores where id not in (with ")
+    for i := range columns {
+        b.WriteString("col")
+        b.WriteString(strconv.Itoa(i))
+        b.WriteString(withFragmentTemplate)
+        if i < len(columns) - 1 {
+            b.WriteString(",")
+            b.WriteString("\n")
+        }
+    }
+    b.WriteString("\n")
+    for i := range columns {
+        b.WriteString("select id from col")
+        b.WriteString(strconv.Itoa(i))
+        if i < len(columns) - 1 {
+            b.WriteString(" union\n")
+        }
+    }
+    b.WriteString("\n)")
+    //log.Print("[Cull Query Debug]\n", b.String())
+
+    params := make([]interface{}, 0, len(columns) * 3)
+    for _, c := range columns {
+        params = append(params, c, c, topNToKeep)
+    }
+
+    result := hdb.db.Exec(b.String(), params...)
     if result.Error != nil {
         return 0, result.Error
     }
+
+    log.Printf("Culled %d rows", result.RowsAffected)
     return result.RowsAffected, nil
 }
 
@@ -135,6 +174,7 @@ func (hdb *HiscoresDbTransaction) Select(topN int, key string) ([]HiscoreWithMap
     if len(results) == 0 {
         return nil, errors.New("Unexpected: Zero results but initially not zero")
     }
+
     results2 := make([]HiscoreWithMap, 0, len(results))
     for i := range results {
         results2 = append(results2, results[i].withMap())

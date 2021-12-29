@@ -6,10 +6,8 @@ import (
 
 var hdb *HiscoresDb
 
-func TestCull(t *testing.T) {
+func _TestInsertData(t *testing.T) {
     tx := hdb.MakeTransaction()
-    defer tx.Rollback()
-
     tx.Insert([]Hiscore {
         {
             Name: "Bob",
@@ -23,45 +21,78 @@ func TestCull(t *testing.T) {
         {
             Name: "Jill",
             HiscoreValues: []HiscoreValue {
-                { Key: "Kills", Value: 2 },
-                { Key: "Deaths", Value: 9009 },
-                { Key: "IQ", Value: 3 },
+                { Key: "Kills", Value: 9001 },
+                { Key: "Deaths", Value: 10 },
+                { Key: "IQ", Value: 4 },
             },
         },
         {
             Name: "Jack",
             HiscoreValues: []HiscoreValue {
                 { Key: "Kills", Value: 2 },
+                { Key: "Deaths", Value: 15 },
+                { Key: "IQ", Value: 77 },
+            },
+        },
+    })
+    tx.Commit()
+}
+
+func TestCull(t *testing.T) {
+    tx := hdb.MakeTransaction()
+    defer tx.Rollback()
+
+    tx.Insert([]Hiscore {
+        {
+            Name: "Bob",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 9001 },
+                { Key: "Deaths", Value: 2 },
+                { Key: "IQ", Value: 10 },
+                { Key: "BobOnlyRecord", Value: 444 },
+            },
+        },
+        {
+            Name: "Jill",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 9000 },
+                { Key: "Deaths", Value: 9009 },
+                { Key: "IQ", Value: 77 },
+            },
+        },
+        {
+            Name: "Jack",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 8000 },
+                { Key: "Deaths", Value: 9009 },
+                { Key: "IQ", Value: 6 },
+            },
+        },
+        {
+            Name: "Harley",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 8000 },
                 { Key: "Deaths", Value: 9009 },
                 { Key: "IQ", Value: 77 },
             },
         },
     })
 
-    eqCulled, err := tx.Cull(2, "EQ")
+    culled, err := tx.Cull(2, []string { "Kills", "IQ" })
     if err != nil {
         t.Error(err)
     }
-    if eqCulled != 0 {
-        t.Fatalf("Expected 0 EQ culls, got %d", eqCulled)
+    if culled != 1 {
+        t.Fatalf("Expected 1 culled, got %d", culled)
     }
-    iqCulled, err := tx.Cull(2, "IQ")
+    rows, err := tx.Select(5, "Kills")
     if err != nil {
         t.Error(err)
     }
-    if iqCulled != 2 {
-        t.Fatalf("Expected 2 IQ culls, got %d", iqCulled)
-    }
-    topKills, err := tx.Select(5, "Kills")
-    if err != nil {
-        t.Error(err)
-    }
-    if len(topKills) != 1 {
-        t.Fatalf("Expected 1 remaining row, got %d", len(topKills))
-    }
-    remainingIq := topKills[0].Hiscore.withMap().ValueMap["IQ"]
-    if remainingIq != 77 {
-        t.Fatalf("Expected remaining IQ to be 77, got %d", remainingIq)
+    for _, row := range rows {
+        if row.Hiscore.Name == "Jack" {
+            t.Fatal("Expected Jack to be deleted")
+        }
     }
 }
 
