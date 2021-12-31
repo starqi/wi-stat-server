@@ -62,12 +62,17 @@ func main() {
         log.Printf("Missing %s, will not be able to update", postPublicKeyEnv)
     } else {
         _postPublicKeyIsolated, _ := pem.Decode([]byte(postPublicKeyInput))
-        _postPublicKeyParsed, err := x509.ParsePKCS1PublicKey(_postPublicKeyIsolated.Bytes)
+        _postPublicKeyParsed, err := x509.ParsePKIXPublicKey(_postPublicKeyIsolated.Bytes)
         if err != nil {
             log.Print("Failed to parse POST public key, will not be able to update, ", postPublicKeyInput, ", ", err)
         } else {
-            postPublicKey = _postPublicKeyParsed
-            log.Print("Parsed POST public key - ", postPublicKeyInput)
+            cast, ok :=_postPublicKeyParsed.(*rsa.PublicKey)
+            if !ok {
+                log.Print("Expected an RSA key, will not be able to update")
+            } else {
+                postPublicKey = cast
+                log.Print("Parsed POST public key - ", postPublicKeyInput)
+            }
         }
     }
 
@@ -124,6 +129,11 @@ func checkSignature(c * gin.Context) {
             log.Print("Failed to read base64 signature, ", err)
             c.AbortWithStatus(http.StatusInternalServerError)
         }
+
+        log.Print("Raw Data: ", string(rawData))
+        log.Print("Raw Data Byte Length: ", len(rawData))
+        log.Print("Raw Data Hash: ", base64.StdEncoding.EncodeToString(hash[:]))
+        log.Print("Signature Header: ", sigBase64)
 
         err = rsa.VerifyPKCS1v15(postPublicKey, crypto.SHA256, hash[:], sigBytes)
         if err != nil {

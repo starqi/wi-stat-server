@@ -93,10 +93,16 @@ func TestMain(m *testing.M) {
         panic("Failed to generate key")
     }
     key = _key
-    
+
+    bytes, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+    if err != nil {
+        println(err)
+        panic("Failed to marshal as PKIX")
+    }
+
     publicKeyBytes := []byte(pem.EncodeToMemory(&pem.Block {
         Type: "PUBLIC KEY",
-        Bytes: x509.MarshalPKCS1PublicKey(&key.PublicKey),
+        Bytes: bytes,
     }))
     
     hsql.RemakeTestDb()

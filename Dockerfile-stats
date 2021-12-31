@@ -1,24 +1,35 @@
 FROM golang:1.17.5-alpine3.15
 
 ENV PORT=8082
-ENV relativeDbPath=./dist/test-db.db
+ENV relativeDbPath=./dist/db.db
 ENV postPublicKey=
 
 WORKDIR /go/src/wi-util-servers
-COPY .. .
+
+# Expect to be running from scripts folder
+COPY ../cmd ./cmd/
+COPY go.mod .
+COPY go.sum .
 
 RUN apk add --no-cache build-base; \
     apk add --no-cache bash; \
     apk add --no-cache sqlite; \
     apk add --no-cache git; \
     go install -v ./...
-    
+
 ENV TAG=v4.1.0
 RUN cd /; \
     go get -u -d github.com/golang-migrate/migrate/cmd/migrate; \
     cd $GOPATH/src/github.com/golang-migrate/migrate/cmd/migrate; \
     git checkout $TAG; \
     go install -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@$TAG
+
+# The above should skip downloads during Docker build if Go source does not change
+# FIXME Not working?
+
+COPY ../db ./db/
+COPY ../scripts/add-migration.sh ./scripts/
+COPY ../scripts/migrate.sh ./scripts/
 
 RUN cd /go/src/wi-util-servers/scripts; \
     bash migrate.sh
