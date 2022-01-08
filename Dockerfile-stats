@@ -6,8 +6,7 @@ ENV postPublicKey=
 
 WORKDIR /go/src/wi-util-servers
 
-# Expect to be running from scripts folder
-COPY ../cmd ./cmd/
+COPY ./cmd ./cmd/
 COPY go.mod .
 COPY go.sum .
 
@@ -27,9 +26,9 @@ RUN cd /; \
 # The above should skip downloads during Docker build if Go source does not change
 # FIXME Not working?
 
-COPY ../db ./db/
-COPY ../scripts/add-migration.sh ./scripts/
-COPY ../scripts/migrate.sh ./scripts/
+COPY ./db ./db/
+COPY ./scripts/add-migration.sh ./scripts/
+COPY ./scripts/migrate.sh ./scripts/
 
 RUN cd /go/src/wi-util-servers/scripts; \
     bash migrate.sh

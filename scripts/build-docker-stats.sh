@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -f ../Dockerfile-stats .. -t wi-stats:latest
+cd .. && docker build -f Dockerfile-stats -t wi-stats:latest .
