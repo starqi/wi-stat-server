@@ -6,7 +6,6 @@ import (
     "log"
     "github.com/gin-gonic/gin"
     "github.com/gorilla/websocket"
-    "strings"
 )
 
 type client struct {
@@ -114,11 +113,13 @@ var upgrader = websocket.Upgrader {
     CheckOrigin: checkOrigin,
 }
 
+// FIXME
 // WS no CORS
 func checkOrigin(r *http.Request) bool {
-    origin := r.Header.Get("origin")
-    log.Print("Origin = ", origin)
-    return strings.Index(origin, "http://localhost") == 0 || strings.Index(origin, "localhost") == 0
+    return true
+    //origin := r.Header.Get("origin")
+    //log.Print("Origin = ", origin)
+    //return strings.Index(origin, "http://localhost") == 0 || strings.Index(origin, "localhost") == 0
 }
 
 func chat(c *gin.Context) {
