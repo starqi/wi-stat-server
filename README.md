@@ -6,3 +6,6 @@ TODO
 - Fix Dockerfiles
 - Docker volumes
 - Unique key for key col
+- Set for deletion IDs
+- TODOs
+- Read SQLite concurrency
