@@ -5,3 +5,4 @@ TODO
 - CORS
 - Fix Dockerfiles
 - Docker volumes
+- Unique key for key col

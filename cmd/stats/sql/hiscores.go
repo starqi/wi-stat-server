@@ -1,13 +1,12 @@
 package sql
 
 import (
-    "strings"
+    "time"
     "errors"
     "log"
     "gorm.io/gorm"
     "gorm.io/driver/sqlite"
     "sort"
-    "strconv"
 )
 
 //////////////////////////////////////////////////
@@ -56,6 +55,9 @@ func (r *MaxSortedHiscores) Swap(i, j int) {
 
 //////////////////////////////////////////////////
 
+const secondsPerDay = 24 * 3600
+var timeGroupSeconds = [3]int64{ 7 * secondsPerDay, 30 * secondsPerDay, 0 }
+
 type HiscoresDbTransaction struct {
     hdb *HiscoresDb
     db *gorm.DB
@@ -96,52 +98,34 @@ func (hdb *HiscoresDb) Transaction(do func (tx *HiscoresDbTransaction) (interfac
     return result, err
 }
 
-func (hdb *HiscoresDbTransaction) Cull(topNToKeep int64, columns []string) (int64, error) {
-
+// TODO More tests for time groups
+func (hdb *HiscoresDbTransaction) Cull(topNToKeep int, columns []string) (int64, error) {
     if len(columns) <= 0 {
         return 0, errors.New("Column count must be > 0")
     }
 
     log.Printf("Starting cull for top %d, columns %v", topNToKeep, columns)
 
-    const withFragmentTemplate = ` as (select h.id from hiscores h
-        inner join hiscore_values hv 
-        on h.id = hv.hiscore_id
-        where hv.key = ? and hv.value in (
-            select distinct hv.value from hiscores h
-            inner join hiscore_values hv
-            on h.id = hv.hiscore_id
-            where hv.key = ? order by hv.value desc limit ?
-        ))`
+    now := time.Now().Unix()
+    pks := make([]int64, 0)
+    for _, seconds := range timeGroupSeconds {
+        var minSeconds int64
+        if seconds <= 0 {
+            minSeconds = 0
+        } else {
+            minSeconds = now - seconds
+        }
 
-    var b strings.Builder
-    b.WriteString("delete from hiscores where id not in (with ")
-    for i := range columns {
-        b.WriteString("col")
-        b.WriteString(strconv.Itoa(i))
-        b.WriteString(withFragmentTemplate)
-        if i < len(columns) - 1 {
-            b.WriteString(",")
-            b.WriteString("\n")
+        for _, column := range columns {
+            _pks, err := hdb.getTopPks(topNToKeep, column, minSeconds)
+            if err != nil { return 0, err }
+            for _, _pk := range _pks {
+                pks = append(pks, _pk)
+            }
         }
     }
-    b.WriteString("\n")
-    for i := range columns {
-        b.WriteString("select id from col")
-        b.WriteString(strconv.Itoa(i))
-        if i < len(columns) - 1 {
-            b.WriteString(" union\n")
-        }
-    }
-    b.WriteString("\n)")
-    //log.Print("[Cull Query Debug]\n", b.String())
 
-    params := make([]interface{}, 0, len(columns) * 3)
-    for _, c := range columns {
-        params = append(params, c, c, topNToKeep)
-    }
-
-    result := hdb.db.Exec(b.String(), params...)
+    result := hdb.db.Exec("delete from hiscores where id not in ?", pks)
     if result.Error != nil {
         return 0, result.Error
     }
@@ -150,39 +134,24 @@ func (hdb *HiscoresDbTransaction) Cull(topNToKeep int64, columns []string) (int6
     return result.RowsAffected, nil
 }
 
-func (hdb *HiscoresDbTransaction) Select(topN int, key string) ([]HiscoreWithMap, error) {
-    var pks []int64
-    result := hdb.db.Raw(`
-        select h.id from hiscores h
-        inner join hiscore_values hv
-        on h.id = hv.hiscore_id
-        where hv.key = ?
-        order by hv.value desc limit ?
-    `, key, topN).Scan(&pks)
-    if result.Error != nil {
-        return nil, result.Error
-    }
-    if len(pks) == 0 {
-        return []HiscoreWithMap{}, nil
+// TODO Check which is first: limit or distinct
+func (hdb *HiscoresDbTransaction) Select(topN int, key string, minSeconds int64) ([]HiscoreWithMap, error) {
+    pks, err := hdb.getTopPks(topN, key, minSeconds)
+    if err != nil { return nil, err }
+    if len(pks) == 0 { return []HiscoreWithMap{}, nil }
+
+    var hiscores []Hiscore
+    hiscoresResult := hdb.db.Preload("HiscoreData").Preload("HiscoreValues").Find(&hiscores, pks)
+    if hiscoresResult.Error != nil { return nil, hiscoresResult.Error }
+    if len(hiscores) == 0 { return nil, errors.New("Unexpected: Zero results but initially not zero") }
+
+    hiscores2 := make([]HiscoreWithMap, 0, len(hiscores))
+    for i := range hiscores {
+        hiscores2 = append(hiscores2, hiscores[i].withMap())
     }
 
-    var results []Hiscore
-    result = hdb.db.Preload("HiscoreData").Preload("HiscoreValues").Find(&results, pks)
-    if result.Error != nil {
-        return nil, result.Error
-    }
-    if len(results) == 0 {
-        return nil, errors.New("Unexpected: Zero results but initially not zero")
-    }
-
-    results2 := make([]HiscoreWithMap, 0, len(results))
-    for i := range results {
-        results2 = append(results2, results[i].withMap())
-    }
-
-    sort.Sort(&MaxSortedHiscores { rows: results2, key: key })
-
-    return results2, nil
+    sort.Sort(&MaxSortedHiscores { rows: hiscores2, key: key })
+    return hiscores2, nil
 }
 
 func (hdb *HiscoresDbTransaction) Insert(entries []Hiscore) (int64, error) {
@@ -191,4 +160,26 @@ func (hdb *HiscoresDbTransaction) Insert(entries []Hiscore) (int64, error) {
         return 0, result.Error
     }
     return result.RowsAffected, nil
+}
+
+func (hdb *HiscoresDbTransaction) getTopPks(topN int, key string, minMs int64) ([]int64, error) {
+    var pks []int64
+    result := hdb.db.Raw(`
+        select h.id from hiscores h
+        inner join hiscore_values hv 
+        on h.id = hv.hiscore_id
+        where hv.key = ? and hv.value in (
+            select distinct hv.value from hiscores h
+            inner join hiscore_values hv
+            on h.id = hv.hiscore_id
+            where hv.key = ? and h.created_at > ?
+            order by hv.value desc limit ?
+        ) and h.created_at > ?
+    `, key, key, minMs, topN, minMs).Scan(&pks)
+
+    if result.Error != nil {
+        return nil, result.Error
+    }
+
+    return pks, nil
 }

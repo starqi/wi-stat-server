@@ -2,10 +2,12 @@ package sql
 
 import (
     "testing"
+    "time"
 )
 
 var hdb *HiscoresDb
 
+// For manual tests
 func _TestInsertData(t *testing.T) {
     tx := hdb.MakeTransaction()
     tx.Insert([]Hiscore {
@@ -41,7 +43,6 @@ func _TestInsertData(t *testing.T) {
 func TestCull(t *testing.T) {
     tx := hdb.MakeTransaction()
     defer tx.Rollback()
-
     tx.Insert([]Hiscore {
         {
             Name: "Bob",
@@ -85,7 +86,7 @@ func TestCull(t *testing.T) {
     if culled != 1 {
         t.Fatalf("Expected 1 culled, got %d", culled)
     }
-    rows, err := tx.Select(5, "Kills")
+    rows, err := tx.Select(5, "Kills", 0)
     if err != nil {
         t.Error(err)
     }
@@ -96,10 +97,86 @@ func TestCull(t *testing.T) {
     }
 }
 
-func TestInsertAndSelectTop(t *testing.T) {
+func TestInsertAndSelectTopVsWeekly(t *testing.T) {
     tx := hdb.MakeTransaction()
-    defer tx.Rollback();
+    defer tx.Rollback()
 
+    now := time.Now().Unix()
+
+    tx.Insert([]Hiscore {
+        {
+            Name: "Bob",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 9001 },
+            },
+            CreatedAt: now - secondsPerDay * 90,
+        },
+        {
+            Name: "Bob2",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 9002 },
+            },
+            CreatedAt: now - secondsPerDay * 90,
+        },
+        {
+            Name: "Bob3",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 9003 },
+            },
+            CreatedAt: now - secondsPerDay * 95,
+        },
+
+        {
+            Name: "MiniBob",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 55 },
+            },
+            CreatedAt: now - secondsPerDay * 1,
+        },
+        {
+            Name: "MiniBob2",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 66 },
+            },
+            CreatedAt: now - secondsPerDay * 2,
+        },
+        {
+            Name: "MiniBob3",
+            HiscoreValues: []HiscoreValue {
+                { Key: "Kills", Value: 77 },
+            },
+            CreatedAt: now - secondsPerDay * 2,
+        },
+    })
+
+    top4KillsGlobal, err := tx.Select(4, "Kills", 0)
+    if err != nil {
+        t.Error(err)
+    }
+    if len(top4KillsGlobal) != 4 {
+        t.Fatalf("Expected 4 rows, got %d", len(top4KillsGlobal))
+    }
+    fourthHighestGlobalKills := top4KillsGlobal[3].Hiscore.withMap().ValueMap["Kills"]
+    if fourthHighestGlobalKills != 77 {
+        t.Fatalf("Expected 77, got %d", fourthHighestGlobalKills)
+    }
+
+    top2KillsThisWeek, err := tx.Select(2, "Kills", now - 7 * secondsPerDay)
+    if err != nil {
+        t.Error(err)
+    }
+    if len(top2KillsThisWeek) != 2 {
+        t.Fatalf("Expected 2 rows, got %d", len(top2KillsThisWeek))
+    }
+    secondHighestKillsThisWeek := top2KillsThisWeek[1].Hiscore.withMap().ValueMap["Kills"]
+    if secondHighestKillsThisWeek != 66 {
+        t.Fatalf("Expected 66, got %d", secondHighestKillsThisWeek)
+    }
+}
+
+func TestInsertAndSelectTopAllTime(t *testing.T) {
+    tx := hdb.MakeTransaction()
+    defer tx.Rollback()
     tx.Insert([]Hiscore {
         {
             Name: "Bob",
@@ -126,7 +203,7 @@ func TestInsertAndSelectTop(t *testing.T) {
         },
     })
 
-    topKills, err := tx.Select(1, "Kills")
+    topKills, err := tx.Select(1, "Kills", 0)
     if err != nil {
         t.Error(err)
     }
@@ -149,7 +226,7 @@ func TestInsertAndSelectTop(t *testing.T) {
         t.Fatalf("Expected MVP to exist and be MVP, got %s", mvp)
     }
 
-    topDeaths, err := tx.Select(55, "Deaths")
+    topDeaths, err := tx.Select(55, "Deaths", 0)
     if err != nil {
         t.Error(err)
     }
@@ -167,7 +244,7 @@ func TestInsertAndSelectTop(t *testing.T) {
         t.Fatalf("Expected 3 values for Jill, got %d", valuesLen)
     }
 
-    topUnknown, err := tx.Select(5, "Unknown")
+    topUnknown, err := tx.Select(5, "Unknown", 0)
     if err != nil {
         t.Error(err)
     }

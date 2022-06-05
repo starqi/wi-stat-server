@@ -161,7 +161,7 @@ func getTopHiscores(c *gin.Context) {
     }
 
     result, err := hdb.Transaction(func (tx *hsql.HiscoresDbTransaction) (interface{}, error) {
-        return tx.Select(num, field)
+        return tx.Select(num, field, 0)
     })
     if err != nil {
         log.Print("Failed to get top hiscores - ", err)
@@ -220,6 +220,8 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
             Name: j.Name,
             HiscoreValues: hiscoreValues,
             HiscoreData: hiscoreData,
+            // Explicitly reference time.Now so that queries can compare against their own time.Now
+            CreatedAt: time.Now().Unix(),
         })
     }
     return result
@@ -228,7 +230,7 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
 func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
     result := make([]HiscoreEntry, 0, len(hiscores))
     for _, h := range hiscores {
-        
+
         extraValues := make(map[string]int64)
         for key, value := range h.ValueMap {
             extraValues[key] = value

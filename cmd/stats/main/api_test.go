@@ -104,7 +104,7 @@ func TestMain(m *testing.M) {
         Type: "PUBLIC KEY",
         Bytes: bytes,
     }))
-    
+
     hsql.RemakeTestDb()
 
     os.Setenv(relativeDbPathEnv, "../../../dist/test-db.db")

@@ -5,7 +5,7 @@ type Hiscore struct {
     Name string
     HiscoreValues []HiscoreValue
     HiscoreData []HiscoreData
-    CreatedAt uint64
+    CreatedAt int64
 }
 
 type HiscoreValue struct {
