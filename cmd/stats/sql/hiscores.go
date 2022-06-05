@@ -56,7 +56,7 @@ func (r *MaxSortedHiscores) Swap(i, j int) {
 //////////////////////////////////////////////////
 
 const secondsPerDay = 24 * 3600
-var timeGroupSeconds = [3]int64{ 7 * secondsPerDay, 30 * secondsPerDay, 0 }
+var TimeGroupSeconds = [3]int64{ 7 * secondsPerDay, 30 * secondsPerDay, 0 }
 
 type HiscoresDbTransaction struct {
     hdb *HiscoresDb
@@ -108,7 +108,7 @@ func (hdb *HiscoresDbTransaction) Cull(topNToKeep int, columns []string) (int64,
 
     now := time.Now().Unix()
     pks := make([]int64, 0)
-    for _, seconds := range timeGroupSeconds {
+    for _, seconds := range TimeGroupSeconds {
         var minSeconds int64
         if seconds <= 0 {
             minSeconds = 0

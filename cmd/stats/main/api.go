@@ -154,14 +154,19 @@ func getTopHiscores(c *gin.Context) {
     }
 
     _num := c.Query("num")
-
     num, err := strconv.Atoi(_num)
     if err != nil || num > maxTopHiscores {
         num = maxTopHiscores
     }
 
+    _by := c.Query("by")
+    by, err := strconv.Atoi(_by)
+    if err != nil || by < 0 || by > 2 {
+        by = 0
+    }
+
     result, err := hdb.Transaction(func (tx *hsql.HiscoresDbTransaction) (interface{}, error) {
-        return tx.Select(num, field, 0)
+        return tx.Select(num, field, hsql.TimeGroupSeconds[by])
     })
     if err != nil {
         log.Print("Failed to get top hiscores - ", err)
