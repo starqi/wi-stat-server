@@ -5,6 +5,53 @@ import (
     "time"
 )
 
+var now = time.Now().Unix()
+var testData1 = []Hiscore {
+    {
+        Name: "Bob",
+        HiscoreValues: []HiscoreValue {
+            { Key: "Kills", Value: 9001 },
+        },
+        CreatedAt: now - secondsPerDay * 90,
+    },
+    {
+        Name: "Bob2",
+        HiscoreValues: []HiscoreValue {
+            { Key: "Kills", Value: 9002 },
+        },
+        CreatedAt: now - secondsPerDay * 90,
+    },
+    {
+        Name: "Bob3",
+        HiscoreValues: []HiscoreValue {
+            { Key: "Kills", Value: 9003 },
+        },
+        CreatedAt: now - secondsPerDay * 95,
+    },
+
+    {
+        Name: "MiniBob",
+        HiscoreValues: []HiscoreValue {
+            { Key: "Kills", Value: 55 },
+        },
+        CreatedAt: now - secondsPerDay * 1,
+    },
+    {
+        Name: "MiniBob2",
+        HiscoreValues: []HiscoreValue {
+            { Key: "Kills", Value: 66 },
+        },
+        CreatedAt: now - secondsPerDay * 2,
+    },
+    {
+        Name: "MiniBob3",
+        HiscoreValues: []HiscoreValue {
+            { Key: "Kills", Value: 77 },
+        },
+        CreatedAt: now - secondsPerDay * 2,
+    },
+}
+
 var hdb *HiscoresDb
 
 // For manual tests
@@ -40,7 +87,33 @@ func _TestInsertData(t *testing.T) {
     tx.Commit()
 }
 
-func TestCull(t *testing.T) {
+func TestCullWeeklyAllTime(t *testing.T) {
+    tx := hdb.MakeTransaction()
+    defer tx.Rollback()
+    tx.Insert(testData1)
+
+    culled, err := tx.Cull(2, []string { "Kills", "IQ" })
+    if err != nil {
+        t.Error(err)
+    }
+    if culled != 2 {
+        t.Fatalf("Expected 2 culled, got %d", culled)
+    }
+    rows, err := tx.Select(10, "Kills", 0)
+    if err != nil {
+        t.Error(err)
+    }
+    for _, row := range rows {
+        if row.Hiscore.Name == "Bob" {
+            t.Fatal("Expected Bob to be deleted")
+        }
+        if row.Hiscore.Name == "MiniBob" {
+            t.Fatal("Expected Bob to be deleted")
+        }
+    }
+}
+
+func TestCullAllTime(t *testing.T) {
     tx := hdb.MakeTransaction()
     defer tx.Rollback()
     tx.Insert([]Hiscore {
@@ -101,53 +174,7 @@ func TestInsertAndSelectTopVsWeekly(t *testing.T) {
     tx := hdb.MakeTransaction()
     defer tx.Rollback()
 
-    now := time.Now().Unix()
-
-    tx.Insert([]Hiscore {
-        {
-            Name: "Bob",
-            HiscoreValues: []HiscoreValue {
-                { Key: "Kills", Value: 9001 },
-            },
-            CreatedAt: now - secondsPerDay * 90,
-        },
-        {
-            Name: "Bob2",
-            HiscoreValues: []HiscoreValue {
-                { Key: "Kills", Value: 9002 },
-            },
-            CreatedAt: now - secondsPerDay * 90,
-        },
-        {
-            Name: "Bob3",
-            HiscoreValues: []HiscoreValue {
-                { Key: "Kills", Value: 9003 },
-            },
-            CreatedAt: now - secondsPerDay * 95,
-        },
-
-        {
-            Name: "MiniBob",
-            HiscoreValues: []HiscoreValue {
-                { Key: "Kills", Value: 55 },
-            },
-            CreatedAt: now - secondsPerDay * 1,
-        },
-        {
-            Name: "MiniBob2",
-            HiscoreValues: []HiscoreValue {
-                { Key: "Kills", Value: 66 },
-            },
-            CreatedAt: now - secondsPerDay * 2,
-        },
-        {
-            Name: "MiniBob3",
-            HiscoreValues: []HiscoreValue {
-                { Key: "Kills", Value: 77 },
-            },
-            CreatedAt: now - secondsPerDay * 2,
-        },
-    })
+    tx.Insert(testData1)
 
     top4KillsGlobal, err := tx.Select(4, "Kills", 0)
     if err != nil {
