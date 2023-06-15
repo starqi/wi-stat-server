@@ -56,7 +56,17 @@ func (r *MaxSortedHiscores) Swap(i, j int) {
 //////////////////////////////////////////////////
 
 const secondsPerDay = 24 * 3600
-var TimeGroupSeconds = [3]int64{ 7 * secondsPerDay, 30 * secondsPerDay, 0 }
+
+var timeGroupSeconds = [3]int64{ secondsPerDay, 7 * secondsPerDay, 30 * secondsPerDay }
+
+const (
+    Daily = iota
+    Weekly = iota
+    Monthly = iota
+    TimeGroupCount = iota
+)
+
+const AllTime = TimeGroupCount
 
 type HiscoresDbTransaction struct {
     hdb *HiscoresDb
@@ -108,20 +118,20 @@ func (hdb *HiscoresDbTransaction) Cull(topNToKeep int, columns []string) (int64,
 
     now := time.Now().Unix()
     pks := make([]int64, 0)
-    for _, seconds := range TimeGroupSeconds {
-        var minSeconds int64
-        if seconds <= 0 {
-            minSeconds = 0
-        } else {
-            minSeconds = now - seconds
-        }
-
+    for _, seconds := range timeGroupSeconds {
         for _, column := range columns {
-            _pks, err := hdb.getTopPks(topNToKeep, column, minSeconds)
+            _pks, err := hdb.getTopPks(topNToKeep, column, now - seconds)
             if err != nil { return 0, err }
             for _, _pk := range _pks {
                 pks = append(pks, _pk)
             }
+        }
+    }
+    for _, column := range columns {
+        _pks, err := hdb.getTopPks(topNToKeep, column, 0)
+        if err != nil { return 0, err }
+        for _, _pk := range _pks {
+            pks = append(pks, _pk)
         }
     }
 
@@ -135,7 +145,15 @@ func (hdb *HiscoresDbTransaction) Cull(topNToKeep int, columns []string) (int64,
 }
 
 // TODO Check which is first: limit or distinct
-func (hdb *HiscoresDbTransaction) Select(topN int, key string, minSeconds int64) ([]HiscoreWithMap, error) {
+func (hdb *HiscoresDbTransaction) Select(topN int, key string, timeGroup int) ([]HiscoreWithMap, error) {
+
+    var minSeconds int64
+    if timeGroup >= TimeGroupCount {
+        minSeconds = 0
+    } else {
+        minSeconds = time.Now().Unix() - timeGroupSeconds[timeGroup]
+    }
+
     pks, err := hdb.getTopPks(topN, key, minSeconds)
     if err != nil { return nil, err }
     if len(pks) == 0 { return []HiscoreWithMap{}, nil }
@@ -162,7 +180,7 @@ func (hdb *HiscoresDbTransaction) Insert(entries []Hiscore) (int64, error) {
     return result.RowsAffected, nil
 }
 
-func (hdb *HiscoresDbTransaction) getTopPks(topN int, key string, minMs int64) ([]int64, error) {
+func (hdb *HiscoresDbTransaction) getTopPks(topN int, key string, minSeconds int64) ([]int64, error) {
     var pks []int64
     result := hdb.db.Raw(`
         select h.id from hiscores h
@@ -175,7 +193,7 @@ func (hdb *HiscoresDbTransaction) getTopPks(topN int, key string, minMs int64) (
             where hv.key = ? and h.created_at > ?
             order by hv.value desc limit ?
         ) and h.created_at > ?
-    `, key, key, minMs, topN, minMs).Scan(&pks)
+    `, key, key, minSeconds, topN, minSeconds).Scan(&pks)
 
     if result.Error != nil {
         return nil, result.Error

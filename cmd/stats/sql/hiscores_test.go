@@ -99,7 +99,7 @@ func TestCullWeeklyAllTime(t *testing.T) {
     if culled != 2 {
         t.Fatalf("Expected 2 culled, got %d", culled)
     }
-    rows, err := tx.Select(10, "Kills", 0)
+    rows, err := tx.Select(10, "Kills", AllTime)
     if err != nil {
         t.Error(err)
     }
@@ -159,7 +159,7 @@ func TestCullAllTime(t *testing.T) {
     if culled != 1 {
         t.Fatalf("Expected 1 culled, got %d", culled)
     }
-    rows, err := tx.Select(5, "Kills", 0)
+    rows, err := tx.Select(5, "Kills", AllTime)
     if err != nil {
         t.Error(err)
     }
@@ -176,7 +176,7 @@ func TestInsertAndSelectTopVsWeekly(t *testing.T) {
 
     tx.Insert(testData1)
 
-    top4KillsGlobal, err := tx.Select(4, "Kills", 0)
+    top4KillsGlobal, err := tx.Select(4, "Kills", AllTime)
     if err != nil {
         t.Error(err)
     }
@@ -188,7 +188,7 @@ func TestInsertAndSelectTopVsWeekly(t *testing.T) {
         t.Fatalf("Expected 77, got %d", fourthHighestGlobalKills)
     }
 
-    top2KillsThisWeek, err := tx.Select(2, "Kills", now - 7 * secondsPerDay)
+    top2KillsThisWeek, err := tx.Select(2, "Kills", Weekly)
     if err != nil {
         t.Error(err)
     }
@@ -230,7 +230,7 @@ func TestInsertAndSelectTopAllTime(t *testing.T) {
         },
     })
 
-    topKills, err := tx.Select(1, "Kills", 0)
+    topKills, err := tx.Select(1, "Kills", AllTime)
     if err != nil {
         t.Error(err)
     }
@@ -253,7 +253,7 @@ func TestInsertAndSelectTopAllTime(t *testing.T) {
         t.Fatalf("Expected MVP to exist and be MVP, got %s", mvp)
     }
 
-    topDeaths, err := tx.Select(55, "Deaths", 0)
+    topDeaths, err := tx.Select(55, "Deaths", AllTime)
     if err != nil {
         t.Error(err)
     }
@@ -271,7 +271,7 @@ func TestInsertAndSelectTopAllTime(t *testing.T) {
         t.Fatalf("Expected 3 values for Jill, got %d", valuesLen)
     }
 
-    topUnknown, err := tx.Select(5, "Unknown", 0)
+    topUnknown, err := tx.Select(5, "Unknown", AllTime)
     if err != nil {
         t.Error(err)
     }
