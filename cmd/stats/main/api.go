@@ -1,21 +1,19 @@
 package main
 
 import (
-    "time"
-    "bytes"
-    "net/http"
-    "io/ioutil"
-    "log"
-    "github.com/gin-gonic/gin"
-    "os"
-    "crypto/rsa"
-    "crypto/x509"
-    "crypto/sha256"
-    "encoding/pem"
-    "encoding/base64"
-    "crypto"
-    "strconv"
-    hsql "github.com/starqi/wi-util-servers/cmd/stats/sql"
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	hsql "github.com/starqi/wi-util-servers/cmd/stats/sql"
+    decrypt "github.com/starqi/wi-util-servers/cmd/stats/decrypt"
 )
 
 // Required does not work unless value can contain nil?
@@ -34,14 +32,13 @@ type HiscoreEntry struct {
 const maxTopHiscores = 10
 const cullTickerSeconds = 60
 const topNToKeep = 10
-const signatureHeader = "x-json-signature"
 const relativeDbPathEnv = "relativeDbPath"
-const postPublicKeyEnv = "postPublicKey"
+const sharedSecretEnv = "sharedSecret"
 
 var cullColumns = []string{ "kills", "healed", "bounty" }
 var hdb *hsql.HiscoresDb
 var cullTicker *time.Ticker
-var postPublicKey *rsa.PublicKey
+var sharedSecret []byte
 
 func cullTickerFunc() {
     for {
@@ -57,22 +54,16 @@ func cullTickerFunc() {
 
 func main() {
 
-    postPublicKeyInput := os.Getenv(postPublicKeyEnv)
-    if postPublicKeyInput == "" {
-        log.Printf("Missing %s, will not be able to update", postPublicKeyEnv)
+    sharedSecretInput := os.Getenv(sharedSecretEnv)
+    if sharedSecretInput == "" {
+        log.Printf("Missing %s, will not be able to update hiscores", sharedSecretEnv)
     } else {
-        _postPublicKeyIsolated, _ := pem.Decode([]byte(postPublicKeyInput))
-        _postPublicKeyParsed, err := x509.ParsePKIXPublicKey(_postPublicKeyIsolated.Bytes)
+        _sharedSecret, err := base64.StdEncoding.DecodeString(sharedSecretInput)
         if err != nil {
-            log.Print("Failed to parse POST public key, will not be able to update, ", postPublicKeyInput, ", ", err)
+            log.Print("Failed to parse shared secret, will not be able to update hiscores")
         } else {
-            cast, ok :=_postPublicKeyParsed.(*rsa.PublicKey)
-            if !ok {
-                log.Print("Expected an RSA key, will not be able to update")
-            } else {
-                postPublicKey = cast
-                log.Print("Parsed POST public key - ", postPublicKeyInput)
-            }
+            sharedSecret = _sharedSecret
+            log.Print("Found shared secret")
         }
     }
 
@@ -101,48 +92,9 @@ func main() {
             c.Next()
         }
     })
-
-    authGroup := router.Group("/hiscore", checkSignature)
-    authGroup.POST("", postHiscore)
-
+    router.POST("hiscore", postHiscore)
     router.GET("hiscore/top", getTopHiscores)
     router.Run() // Will use PORT env var
-}
-
-func checkSignature(c * gin.Context) {
-    if postPublicKey == nil {
-        c.AbortWithStatus(http.StatusUnauthorized)
-    } else {
-        rawData, err := ioutil.ReadAll(c.Request.Body)
-        if err != nil {
-            log.Print("Failed to get body, ", c.ClientIP())
-            c.AbortWithStatus(http.StatusInternalServerError)
-            return
-        }
-        // Must manually ensure body reader is not stuck at EOF 
-        c.Request.Body = ioutil.NopCloser(bytes.NewReader(rawData))
-
-        hash := sha256.Sum256(rawData)
-        sigBase64 := c.GetHeader(signatureHeader)
-        sigBytes, err := base64.StdEncoding.DecodeString(sigBase64)
-        if err != nil {
-            log.Print("Failed to read base64 signature, ", err)
-            c.AbortWithStatus(http.StatusInternalServerError)
-        }
-
-        log.Print("Raw Data: ", string(rawData))
-        log.Print("Raw Data Byte Length: ", len(rawData))
-        log.Print("Raw Data Hash: ", base64.StdEncoding.EncodeToString(hash[:]))
-        log.Print("Signature Header: ", sigBase64)
-
-        err = rsa.VerifyPKCS1v15(postPublicKey, crypto.SHA256, hash[:], sigBytes)
-        if err != nil {
-            log.Print("Failed to verify signature, ", c.ClientIP())
-            c.AbortWithStatus(http.StatusUnauthorized)
-        }
-    }
-
-    c.Next()
 }
 
 func getTopHiscores(c *gin.Context) {
@@ -185,13 +137,42 @@ func getTopHiscores(c *gin.Context) {
 }
 
 func postHiscore(c *gin.Context) {
-    var json []HiscoreEntry
-    if err := c.ShouldBindJSON(&json); err != nil {
+    rawData, err := ioutil.ReadAll(c.Request.Body)
+    if err != nil {
+        log.Print("Body parse error ", err)
         c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
+    // Must manually ensure body reader is not stuck at EOF 
+    c.Request.Body = ioutil.NopCloser(bytes.NewReader(rawData))
+
+    binaryData := make([]byte, base64.StdEncoding.DecodedLen(len(string(rawData))))
+    n, err := base64.StdEncoding.Decode(binaryData, rawData)
+    binaryData = binaryData[:n]
+    if err != nil {
+        log.Print("Base64 error ", err)
+        c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    payload, err := decrypt.DecryptHandlePostedHiscores(sharedSecret, binaryData)
+    if err != nil {
+        log.Print("Decrypt failed! ", err, " ", string(rawData))
+        c.AbortWithStatus(http.StatusUnauthorized)
+        return
+    }
+    payloadStr := string(payload)
+    log.Print(payloadStr)
+
+    var hiscores []HiscoreEntry
+    err = json.Unmarshal(payload, &hiscores)
+    if err != nil {
+        c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
     rowsAffected, err := hdb.Transaction(func (tx *hsql.HiscoresDbTransaction) (interface{}, error) {
-        return tx.Insert(jsonHiscoresToDb(json))
+        return tx.Insert(jsonHiscoresToDb(hiscores))
     })
     if err != nil {
         log.Print("Failed to POST - ", err)

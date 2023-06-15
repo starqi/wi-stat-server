@@ -1,4 +1,4 @@
-FROM golang:1.17.5-alpine3.15
+FROM golang:alpine
 
 ENV PORT=8082
 ENV relativeDbPath=./dist/db.db
