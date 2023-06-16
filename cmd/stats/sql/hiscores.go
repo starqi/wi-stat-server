@@ -78,7 +78,8 @@ type HiscoresDb struct {
 }
 
 func MakeHiscoresDb(sqliteDbPath string) (*HiscoresDb, error) {
-    db, err := gorm.Open(sqlite.Open(sqliteDbPath), &gorm.Config{})
+    // sqlite by default does not have FK enforced!
+    db, err := gorm.Open(sqlite.Open(sqliteDbPath + "?_foreign_keys=on"), &gorm.Config{})
     if err != nil {
         return nil, err
     }
@@ -190,9 +191,9 @@ func (hdb *HiscoresDbTransaction) getTopPks(topN int, key string, minSeconds int
             select distinct hv.value from hiscores h
             inner join hiscore_values hv
             on h.id = hv.hiscore_id
-            where hv.key = ? and h.created_at > ?
+            where hv.key = ? and h.created_at >= ?
             order by hv.value desc limit ?
-        ) and h.created_at > ?
+        ) and h.created_at >= ?
     `, key, key, minSeconds, topN, minSeconds).Scan(&pks)
 
     if result.Error != nil {
