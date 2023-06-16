@@ -83,6 +83,10 @@ func MakeHiscoresDb(sqliteDbPath string) (*HiscoresDb, error) {
     if err != nil {
         return nil, err
     }
+    result := db.Exec("PRAGMA foreign_keys = ON")
+    if result.Error != nil {
+        return nil, err
+    }
     return &HiscoresDb { db }, nil
 }
 
