@@ -1,7 +1,9 @@
-FROM golang:1.17.5-alpine3.15
+FROM golang:alpine
 ENV PORT=8081
 WORKDIR /go/src/wi-util-servers
-COPY . .
 RUN apk add --no-cache build-base
+COPY ./cmd/chat ./cmd/chat/
+COPY go.mod .
+COPY go.sum .
 RUN go install -v ./...
 ENTRYPOINT chat
