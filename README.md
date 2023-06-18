@@ -1,9 +1,15 @@
-Simple stat server and chat server for WebInf.
+Simple stat server (persisted data) and session/chat server (ephemeral data) for unnamed game project.
 
     TODO
 
-        - CORS design
-        - Prod build
+        / Chat -> chat, session server
+        / Extract chat
+        - Rename chat to sessions
+        - Expiry mechanism
+        - Different game server design
+        - CORS design chat
+        - CORS design stats
+        - Prod build Gin
         - Unique key for key col
         - Redo proper full endpoint api_test, now using AES
         ? Set for deletion IDs
