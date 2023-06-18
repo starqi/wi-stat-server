@@ -81,6 +81,7 @@ func main() {
     cullTicker = time.NewTicker(cullTickerSeconds * time.Second)
     go cullTickerFunc()
 
+    // TODO CORS is for ease of local testing not behind Nginx, or else Chrome blocks requests to different ports
     router := gin.Default()
     router.Use(func (c *gin.Context) {
         c.Header("Access-Control-Allow-Origin", "*")
