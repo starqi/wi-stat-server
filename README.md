@@ -4,9 +4,15 @@ Simple stat server (persisted data) and session/chat server (ephemeral data) for
 
         / Chat -> chat, session server
         / Extract chat
+        - Gin timeout
+            - Test by turning off aggregator
+        - Provide in game name and actually use it
+        - Channel closes?
         - Rename chat to sessions
         - Expiry mechanism
-        - Different game server design
+            - Lock clean up if in game
+            - Re-request if expired otherwise
+        - Different game servers + chat design
         - CORS design chat
         - CORS design stats
         - Prod build Gin

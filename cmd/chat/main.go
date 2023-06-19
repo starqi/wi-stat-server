@@ -50,7 +50,12 @@ func chatWs(c *gin.Context) {
         c.Status(http.StatusUnauthorized)
         return
     }
-    session := sessionsService.Find(st)
+
+    cb := make(chan *sessions.Session)
+    defer close(cb)
+    sessionsService.FindChan<-sessions.FindData{st, cb}
+    session := <-cb
+
     if session == nil {
         log.Print("Invalid session in chat connection ", st, " ", c.ClientIP())
         c.Status(http.StatusUnauthorized)
@@ -72,7 +77,10 @@ func chatWs(c *gin.Context) {
 }
 
 func newToken(c *gin.Context) {
-    token := sessionsService.Request()
+    cb := make(chan string)
+    defer close(cb)
+    sessionsService.RequestChan<-sessions.RequestData{cb}
+    token := <-cb
     c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
@@ -82,7 +90,12 @@ func describeToken(c *gin.Context) {
         c.AbortWithStatus(http.StatusBadRequest)
         return
     }
-    if session := sessionsService.Find(id); session != nil {
+
+    cb := make(chan *sessions.Session)
+    defer close(cb)
+    sessionsService.FindChan<-sessions.FindData{id, cb}
+
+    if session := <-cb; session != nil {
         c.JSON(http.StatusOK, sessions.SessionToJson(session))
     } else {
         c.JSON(http.StatusOK, nil)
@@ -90,13 +103,22 @@ func describeToken(c *gin.Context) {
 }
 
 func patchToken(c *gin.Context) {
+    id, success := c.Params.Get("id")
+    if !success {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+
     var json sessions.SessionAsJson
     if err := c.BindJSON(&json); err != nil {
         log.Print("Patch token JSON parse failed ", err)
         c.AbortWithStatus(http.StatusBadRequest)
         return
     }
-    if !sessionsService.PatchFromJson(&json) {
+
+    cb := make(chan bool);
+    sessionsService.PatchFromJsonChan<-sessions.PatchFromJsonData{id, &json, cb}
+    if success := <-cb; !success {
         log.Print("Patch token missing token ", json.Token)
         c.AbortWithStatus(http.StatusBadRequest)
         return

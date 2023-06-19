@@ -1,32 +1,10 @@
 package sessions
 
 import (
-    "github.com/google/uuid"
-    "time"
+	"log"
+	"time"
+	"github.com/google/uuid"
 )
-
-var tokenLifetimeMinutes time.Duration = 1
-
-type Session struct {
-    token string
-    isInGame bool
-    gameInstance string
-    expiry time.Time
-}
-
-type SessionAsJson struct {
-    Token string `json:"token"`
-    GameInstance string `json:"gameInstance"`
-    IsInGame bool `json:"isInGame"`
-}
-
-func SessionToJson(s *Session) SessionAsJson {
-    return SessionAsJson{
-        s.token,
-        s.gameInstance,
-        s.isInGame,
-    }
-}
 
 func (s *Session) GetToken() string { 
     return s.token
@@ -36,21 +14,59 @@ func (s *Session) GetIsInGame() bool {
     return s.isInGame
 }
 
-type Sessions struct {
-    tokens map[string]Session
+func SessionToJson(s *Session) SessionAsJson {
+    if s == nil {
+        log.Print("Unexpected null session pointer, returning garbage")
+        return SessionAsJson{}
+    }
+    return SessionAsJson{
+        s.token,
+        &s.gameInstance,
+        &s.isInGame,
+        &s.playerName,
+    }
 }
 
 func MakeSessions() *Sessions {
     tokens := make(map[string]Session)
-    return &Sessions{
+    s := &Sessions{
         tokens,
+        make(chan PatchFromJsonData),
+        make(chan FindData),
+        make(chan RequestData),
+    }
+    go s.aggregator()
+    return s
+}
+
+//////////////////////////////////////////////////
+
+var tokenLifetimeMinutes time.Duration = 1
+
+func (s *Sessions) aggregator() {
+    ticker := time.NewTicker(time.Minute)
+    for {
+        select {
+        case patch := <-s.PatchFromJsonChan:
+            patch.Cb<-s.patchFromJson(patch.Token, patch.Info)
+        case find := <-s.FindChan:
+            find.Cb<-s.find(find.Token)
+        case request := <-s.RequestChan:
+            request.Cb<-s.request()
+        case _ = <-ticker.C:
+            s.cleanUpExpired()
+        }
     }
 }
 
-func (s *Sessions) Request() string {
+//////////////////////////////////////////////////
+// Synchronous methods
+
+func (s *Sessions) request() string {
     session := Session{
         uuid.New().String(),
         false,
+        "",
         "",
         time.Now().Add(time.Minute * tokenLifetimeMinutes),
     }
@@ -58,21 +74,41 @@ func (s *Sessions) Request() string {
     return session.token
 }
 
-func (s *Sessions) Find(id string) *Session {
-    if session, found := s.tokens[id]; found {
+func (s *Sessions) find(token string) *Session {
+    if session, found := s.tokens[token]; found {
         return &session
     } else {
         return nil
     }
 }
 
-func (s *Sessions) PatchFromJson(req *SessionAsJson) bool {
-    if found := s.Find(req.Token); found != nil {
-        found.isInGame = req.IsInGame
-        found.gameInstance = req.GameInstance
+func (s *Sessions) patchFromJson(token string, req *SessionAsJson) bool {
+    if req == nil {
+        return false
+    }
+
+    // Ignore JSON token, redundant field
+
+    if found := s.find(token); found != nil {
+        if req.IsInGame != nil {
+            found.isInGame = *req.IsInGame
+        }
+        if req.GameInstance != nil {
+            found.gameInstance = *req.GameInstance
+        }
+        if req.PlayerName != nil {
+            found.playerName = *req.PlayerName
+        }
         found.expiry = time.Now().Add(time.Minute * tokenLifetimeMinutes)
         return true
     } else {
         return false
+    }
+}
+
+func (s *Sessions) cleanUpExpired() {
+    log.Print("TODO Tick clean up stub ", len(s.tokens))
+    for k, v := range s.tokens {
+        log.Print(k, " ", v)
     }
 }
