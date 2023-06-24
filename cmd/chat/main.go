@@ -19,10 +19,21 @@ func main() {
     sessionsService = sessions.MakeSessions()
     chatService = chat.MakeChat()
 
+    // TODO CORS is for ease of local testing not behind Nginx, or else Chrome blocks requests to different ports
     router := gin.Default()
+    router.Use(func (c *gin.Context) {
+        c.Header("Access-Control-Allow-Origin", "*")
+        c.Header("Access-Control-Allow-Methods", "*")
+        c.Header("Access-Control-Allow-Headers", "Authorization, *")
+        if c.Request.Method == "OPTIONS" {
+            c.AbortWithStatus(http.StatusNoContent)
+        } else {
+            c.Next()
+        }
+    })
     router.GET("/chat", chatWs)
     // Should be rate limited by Nginx
-    router.GET("/new_token", newToken)
+    router.POST("/token/new", newToken)
 
     // Private via Nginx
     router.GET("/token/:id", describeToken)

@@ -2,9 +2,21 @@ package sessions
 
 import (
 	"log"
+    "fmt"
 	"time"
 	"github.com/google/uuid"
 )
+
+func (s *Session) String() string {
+    return fmt.Sprintf(
+        "Token=%s, Game Instance=%s, Player Name=%s, Is In Game=%t, Expiry=%d",
+        s.token,
+        s.gameInstance,
+        s.playerName,
+        s.isInGame,
+        s.expiry.Unix(),
+    )
+}
 
 func (s *Session) GetToken() string { 
     return s.token
@@ -28,7 +40,7 @@ func SessionToJson(s *Session) SessionAsJson {
 }
 
 func MakeSessions() *Sessions {
-    tokens := make(map[string]Session)
+    tokens := make(map[string]*Session)
     s := &Sessions{
         tokens,
         make(chan PatchFromJsonData),
@@ -70,13 +82,13 @@ func (s *Sessions) request() string {
         "",
         time.Now().Add(time.Minute * tokenLifetimeMinutes),
     }
-    s.tokens[session.token] = session
+    s.tokens[session.token] = &session
     return session.token
 }
 
 func (s *Sessions) find(token string) *Session {
     if session, found := s.tokens[token]; found {
-        return &session
+        return session
     } else {
         return nil
     }
@@ -107,8 +119,17 @@ func (s *Sessions) patchFromJson(token string, req *SessionAsJson) bool {
 }
 
 func (s *Sessions) cleanUpExpired() {
-    log.Print("TODO Tick clean up stub ", len(s.tokens))
+    if len(s.tokens) <= 0 {
+        return
+    }
+    log.Print("Tick clean up, count=", len(s.tokens))
+    now := time.Now()
     for k, v := range s.tokens {
-        log.Print(k, " ", v)
+        if now.Compare(v.expiry) >= 0 {
+            delete(s.tokens, k)
+            log.Print("Deleting: ", v)
+        } else {
+            log.Print("Keeping: ", v)
+        }
     }
 }

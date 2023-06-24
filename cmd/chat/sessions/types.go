@@ -24,7 +24,7 @@ type FindData struct{Token string; Cb chan *Session}
 type RequestData struct{Cb chan string}
 
 type Sessions struct {
-    tokens map[string]Session
+    tokens map[string]*Session
     PatchFromJsonChan chan PatchFromJsonData
     FindChan chan FindData
     RequestChan chan RequestData
