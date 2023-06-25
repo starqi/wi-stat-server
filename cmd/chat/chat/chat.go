@@ -119,6 +119,7 @@ func (chat *Chat) clientLoop(c *client) {
             chat.unregister <- c
             return
         }
+
         if messageType == websocket.TextMessage {
             msg := string(p)
             if c.session == nil {
@@ -127,12 +128,10 @@ func (chat *Chat) clientLoop(c *client) {
                 c.session = <-cb
                 if c.session == nil {
                     log.Print("Invalid token on chat join, closing ", msg)
-                    chat.unregister <- c
-                    return
+                    c.conn.Close()
                 } else if !c.session.IsInGame {
                     log.Print("Cannot join chat when not in game, closing ", c.session)
-                    chat.unregister <- c
-                    return
+                    c.conn.Close()
                 }
             } else {
                 chat.inbound <- fmt.Sprintf("%s: %s", c.session.PlayerName, msg)
