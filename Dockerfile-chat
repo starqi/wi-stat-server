@@ -1,5 +1,6 @@
 FROM golang:alpine
 ENV PORT=8081
+ENV GIN_MODE=release
 WORKDIR /go/src/wi-util-servers
 RUN apk add --no-cache build-base
 COPY ./cmd/chat ./cmd/chat/

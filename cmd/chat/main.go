@@ -63,7 +63,7 @@ func chatWs(c *gin.Context) {
 }
 
 func newToken(c *gin.Context) {
-    cb := make(chan string)
+    cb := make(chan *string)
     sessionsService.RequestChan<-sessions.RequestData{Cb: cb}
     token := <-cb
     c.JSON(http.StatusOK, gin.H{"token": token})

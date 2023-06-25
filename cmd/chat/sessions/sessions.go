@@ -69,7 +69,12 @@ func (s *Sessions) aggregator() {
             }
             close(find.Cb)
         case request := <-s.RequestChan:
-            request.Cb <- s.request()
+            token, success := s.request()
+            if success {
+                request.Cb <- &token
+            } else {
+                request.Cb <- nil
+            }
             close(request.Cb)
         case _ = <-ticker.C:
             s.cleanUpExpired()
@@ -80,16 +85,21 @@ func (s *Sessions) aggregator() {
 //////////////////////////////////////////////////
 // Synchronous methods
 
-func (s *Sessions) request() string {
+func (s *Sessions) request() (string, bool) {
+    u := uuid.New().String()
+    if s.tokens[u] != nil {
+        log.Print("UUID collision, rejecting ", u)
+        return "", false
+    }
     session := Session{
-        uuid.New().String(),
+        u,
         false,
         "",
         "",
         time.Now().Add(time.Minute * tokenLifetimeMinutesFromRequest),
     }
     s.tokens[session.Token] = &session
-    return session.Token
+    return session.Token, true
 }
 
 func (s *Sessions) findAndCopy(token string) (Session, bool) {

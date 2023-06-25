@@ -27,7 +27,7 @@ type PatchSessionRequest struct {
 
 type PatchFromJsonData struct{Token string; Info *PatchSessionRequest; Cb chan bool}
 type FindData struct{Token string; Cb chan *Session}
-type RequestData struct{Cb chan string}
+type RequestData struct{Cb chan *string}
 
 type Sessions struct {
     tokens map[string]*Session
