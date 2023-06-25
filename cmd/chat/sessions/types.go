@@ -14,12 +14,18 @@ type Session struct {
 
 type SessionAsJson struct {
     Token string `json:"token"`
+    GameInstance string `json:"gameInstance"`
+    IsInGame bool `json:"isInGame"`
+    PlayerName string `json:"playerName"`
+}
+
+type PatchSessionRequest struct {
     GameInstance *string `json:"gameInstance"`
     IsInGame *bool `json:"isInGame"`
     PlayerName *string `json:"playerName"`
 }
 
-type PatchFromJsonData struct{Token string; Info *SessionAsJson; Cb chan bool}
+type PatchFromJsonData struct{Token string; Info *PatchSessionRequest; Cb chan bool}
 type FindData struct{Token string; Cb chan *Session}
 type RequestData struct{Cb chan string}
 

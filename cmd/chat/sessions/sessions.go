@@ -25,9 +25,9 @@ func SessionToJson(s *Session) SessionAsJson {
     }
     return SessionAsJson{
         s.Token,
-        &s.GameInstance,
-        &s.IsInGame,
-        &s.PlayerName,
+        s.GameInstance,
+        s.IsInGame,
+        s.PlayerName,
     }
 }
 
@@ -45,7 +45,13 @@ func MakeSessions() *Sessions {
 
 //////////////////////////////////////////////////
 
-var tokenLifetimeMinutes time.Duration = 1
+// [Timed out tokens]
+// Currently use crude approach after timing out,
+// where the next action which needs a token will fail,
+// but won't actively kick people out of chat for example.
+// Game server must slow but constantly ping the sessions server.
+var tokenLifetimeMinutesFromRequest time.Duration = 1
+var tokenLifetimeMinutesFromPatch time.Duration = 5
 
 func (s *Sessions) aggregator() {
     ticker := time.NewTicker(time.Minute)
@@ -80,7 +86,7 @@ func (s *Sessions) request() string {
         false,
         "",
         "",
-        time.Now().Add(time.Minute * tokenLifetimeMinutes),
+        time.Now().Add(time.Minute * tokenLifetimeMinutesFromRequest),
     }
     s.tokens[session.Token] = &session
     return session.Token
@@ -94,12 +100,10 @@ func (s *Sessions) findAndCopy(token string) (Session, bool) {
     }
 }
 
-func (s *Sessions) patchFromJson(token string, req *SessionAsJson) bool {
+func (s *Sessions) patchFromJson(token string, req *PatchSessionRequest) bool {
     if req == nil {
         return false
     }
-
-    // Ignore JSON token, redundant field
 
     if found := s.tokens[token]; found != nil {
         if req.IsInGame != nil {
@@ -111,7 +115,8 @@ func (s *Sessions) patchFromJson(token string, req *SessionAsJson) bool {
         if req.PlayerName != nil {
             found.PlayerName = *req.PlayerName
         }
-        found.Expiry = time.Now().Add(time.Minute * tokenLifetimeMinutes)
+        // Can send nothing to continue refreshing the expiry
+        found.Expiry = time.Now().Add(time.Minute * tokenLifetimeMinutesFromPatch)
         return true
     } else {
         return false
@@ -125,8 +130,7 @@ func (s *Sessions) cleanUpExpired() {
     log.Print("Tick clean up, count=", len(s.tokens))
     now := time.Now()
     for k, v := range s.tokens {
-        // Right now it's simple, there is no need to update expiry, when player leaves the game, clean up is immediate
-        if !v.IsInGame && now.Compare(v.Expiry) >= 0 {
+        if now.Compare(v.Expiry) >= 0 {
             log.Print("Deleting: ", v)
             delete(s.tokens, k)
         } else {

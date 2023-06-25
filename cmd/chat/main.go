@@ -93,7 +93,7 @@ func patchToken(c *gin.Context) {
         return
     }
 
-    var json sessions.SessionAsJson
+    var json sessions.PatchSessionRequest
     if err := c.BindJSON(&json); err != nil {
         log.Print("Patch token JSON parse failed ", err)
         c.AbortWithStatus(http.StatusBadRequest)
@@ -103,7 +103,7 @@ func patchToken(c *gin.Context) {
     cb := make(chan bool);
     sessionsService.PatchFromJsonChan<-sessions.PatchFromJsonData{Token: id, Info: &json, Cb: cb}
     if success := <-cb; !success {
-        log.Print("Patch token missing token ", json.Token)
+        log.Print("Patch token missing token ", id)
         c.AbortWithStatus(http.StatusBadRequest)
         return
     }
