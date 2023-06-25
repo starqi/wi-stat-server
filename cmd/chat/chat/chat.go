@@ -3,7 +3,9 @@ package chat
 import (
     "time"
     "log"
+    "fmt"
     "github.com/gorilla/websocket"
+	"github.com/starqi/wi-util-servers/cmd/chat/sessions"
 )
 
 type Chat struct {
@@ -11,14 +13,16 @@ type Chat struct {
     unregister chan *client
     inbound chan string
     clients map[*client]bool
+    sessionsService *sessions.Sessions
 }
 
-func MakeChat() *Chat {
+func MakeChat(sessionsService *sessions.Sessions) *Chat {
     chat := Chat {
         make(chan *websocket.Conn),
         make(chan *client),
         make(chan string, 20),
         make(map[*client]bool),
+        sessionsService,
     }
     go chat.aggregator()
     return &chat
@@ -28,6 +32,7 @@ func MakeChat() *Chat {
 
 type client struct {
     conn *websocket.Conn
+    session *sessions.Session
     revision uint64
 }
 
@@ -115,8 +120,23 @@ func (chat *Chat) clientLoop(c *client) {
             return
         }
         if messageType == websocket.TextMessage {
-            s := string(p)
-            chat.inbound <- s
+            msg := string(p)
+            if c.session == nil {
+                cb := make(chan *sessions.Session)
+                chat.sessionsService.FindChan <- sessions.FindData{Token: msg, Cb: cb}
+                c.session = <-cb
+                if c.session == nil {
+                    log.Print("Invalid token on chat join, closing ", msg)
+                    chat.unregister <- c
+                    return
+                } else if !c.session.IsInGame {
+                    log.Print("Cannot join chat when not in game, closing ", c.session)
+                    chat.unregister <- c
+                    return
+                }
+            } else {
+                chat.inbound <- fmt.Sprintf("%s: %s", c.session.PlayerName, msg)
+            }
         }
     }
 }

@@ -5,11 +5,11 @@ import (
 )
 
 type Session struct {
-    token string
-    isInGame bool
-    gameInstance string
-    playerName string
-    expiry time.Time
+    Token string
+    IsInGame bool
+    GameInstance string
+    PlayerName string
+    Expiry time.Time
 }
 
 type SessionAsJson struct {

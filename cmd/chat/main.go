@@ -9,15 +9,13 @@ import (
 	"github.com/starqi/wi-util-servers/cmd/chat/sessions"
 )
 
-var sessionTokenHeader = "X-sessionToken"
-
 var chatService *chat.Chat
 var sessionsService *sessions.Sessions
 
 func main() {
 
     sessionsService = sessions.MakeSessions()
-    chatService = chat.MakeChat()
+    chatService = chat.MakeChat(sessionsService)
 
     // TODO CORS is for ease of local testing not behind Nginx, or else Chrome blocks requests to different ports
     router := gin.Default()
@@ -55,29 +53,6 @@ func checkOrigin(r *http.Request) bool {
 }
 
 func chatWs(c *gin.Context) {
-    st := c.Request.Header.Get(sessionTokenHeader)
-    if st == "" {
-        log.Print("Missing token header in chat connection ", c.ClientIP())
-        c.Status(http.StatusUnauthorized)
-        return
-    }
-
-    cb := make(chan *sessions.Session)
-    defer close(cb)
-    sessionsService.FindChan<-sessions.FindData{st, cb}
-    session := <-cb
-
-    if session == nil {
-        log.Print("Invalid session in chat connection ", st, " ", c.ClientIP())
-        c.Status(http.StatusUnauthorized)
-        return
-    }
-    if !session.GetIsInGame() {
-        log.Print("Not in-game for chat connection ", st, " ", c.ClientIP())
-        c.Status(http.StatusUnauthorized)
-        return
-    }
-
     conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
     if err != nil {
         log.Print("Chat init failed! ", err)
@@ -89,8 +64,7 @@ func chatWs(c *gin.Context) {
 
 func newToken(c *gin.Context) {
     cb := make(chan string)
-    defer close(cb)
-    sessionsService.RequestChan<-sessions.RequestData{cb}
+    sessionsService.RequestChan<-sessions.RequestData{Cb: cb}
     token := <-cb
     c.JSON(http.StatusOK, gin.H{"token": token})
 }
@@ -103,8 +77,7 @@ func describeToken(c *gin.Context) {
     }
 
     cb := make(chan *sessions.Session)
-    defer close(cb)
-    sessionsService.FindChan<-sessions.FindData{id, cb}
+    sessionsService.FindChan<-sessions.FindData{Token: id, Cb: cb}
 
     if session := <-cb; session != nil {
         c.JSON(http.StatusOK, sessions.SessionToJson(session))
@@ -128,7 +101,7 @@ func patchToken(c *gin.Context) {
     }
 
     cb := make(chan bool);
-    sessionsService.PatchFromJsonChan<-sessions.PatchFromJsonData{id, &json, cb}
+    sessionsService.PatchFromJsonChan<-sessions.PatchFromJsonData{Token: id, Info: &json, Cb: cb}
     if success := <-cb; !success {
         log.Print("Patch token missing token ", json.Token)
         c.AbortWithStatus(http.StatusBadRequest)
