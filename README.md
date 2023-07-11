@@ -2,6 +2,8 @@ Simple stat server (persisted data) and session/chat server (ephemeral data) for
 
     TODO
 
+	- Stop sending chat messages before validation...
+	- go get step for migrate is outdated?
         - Gin timeout
             - Test by turning off aggregator
         - Chat message size cap
