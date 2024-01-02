@@ -25,6 +25,7 @@ type HiscoreEntry struct {
     ClassName string `json:"className"`
     Bounty int64 `json:"bounty"`
     BountyColor string `json:"bountyColor"`
+    IsBotGame bool `json:"isBotGame"`
     ExtraValues map[string]int64 `json:"extraValues"`
     ExtraData map[string]string `json:"extraData"`
 }
@@ -195,6 +196,11 @@ func jsonHiscoresToDb(json []HiscoreEntry) []hsql.Hiscore {
         hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "kills", Value: j.Kills })
         hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "deaths", Value: j.Deaths })
         hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "bounty", Value: j.Bounty })
+        var isBotGame int64 = 0
+        if j.IsBotGame {
+            isBotGame = 1
+        }
+        hiscoreValues = append(hiscoreValues, hsql.HiscoreValue { Key: "isBotGame", Value: isBotGame })
 
         hiscoreData := make([]hsql.HiscoreData, 0)
         for key, val := range j.ExtraData {
@@ -223,9 +229,17 @@ func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
         for key, value := range h.ValueMap {
             extraValues[key] = value
         }
+
+        isBotGame := false
+        _isBotGame, exists := h.ValueMap["isBotGame"]
+        if exists && _isBotGame >= 1 {
+            isBotGame = true
+        }
+
         delete(extraValues, "kills")
         delete(extraValues, "deaths")
         delete(extraValues, "bounty")
+        delete(extraValues, "isBotGame")
 
         extraData := make(map[string]string)
         for key, value := range h.DataMap {
@@ -241,6 +255,7 @@ func dbHiscoresToJson(hiscores []hsql.HiscoreWithMap) []HiscoreEntry {
             Kills: h.ValueMap["kills"],
             Deaths: h.ValueMap["deaths"],
             ClassName: h.DataMap["className"],
+            IsBotGame: isBotGame,
             Bounty: h.ValueMap["bounty"],
             BountyColor: h.DataMap["bountyColor"],
             ExtraValues: extraValues,

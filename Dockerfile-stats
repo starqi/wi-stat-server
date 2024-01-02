@@ -6,16 +6,14 @@ ENV sharedSecret=
 
 WORKDIR /go/src/wi-util-servers
 
-ENV TAG=v4.1.0
+# Temp musl/alpine issue workaround, https://github.com/mattn/go-sqlite3/issues/1164
+ENV CGO_CFLAGS="-D_LARGEFILE64_SOURCE"
 RUN apk add --no-cache build-base; \
     apk add --no-cache bash; \
     apk add --no-cache sqlite; \
     apk add --no-cache git; \
     cd /; \
-    go get -u -d github.com/golang-migrate/migrate/cmd/migrate; \
-    cd $GOPATH/src/github.com/golang-migrate/migrate/cmd/migrate; \
-    git checkout $TAG; \
-    go install -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@$TAG
+    go install -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 COPY go.mod .
 COPY go.sum .
